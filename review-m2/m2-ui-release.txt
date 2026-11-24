@@ -1,0 +1,49 @@
+M2 UI OK
+M2 Layout 900 OK
+M2 CHARTS OK
+M2 ROUNDTRIP OK
+{
+  toolbar: {
+    rect: { x: 0, y: 42, width: 1280, height: 38 },
+    lastRight: 1272.0000839233398,
+    buttons: 11,
+    overflow: false
+  },
+  format: {
+    currency: '¥#,##0.00',
+    bold: 1,
+    fill: '#d3f4e6',
+    numLabel: '#,##0',
+    boldActive: true
+  },
+  studio: {
+    rect: {
+      x: 888,
+      y: 122,
+      width: 380,
+      height: 423.3333435058594,
+      right: 1268,
+      bottom: 545.3333435058594
+    },
+    range: 'A1:C13',
+    title: '柱状图 · 月度',
+    sum: '3213000',
+    types: 4
+  },
+  cards: [ '柱状图 · 月度', '折线图 · 月度', '面积图 · 月度', '饼图 · 月度' ],
+  reopened: { cf: 1, cards: 1, sum: '3213000' },
+  narrow: {
+    width: 900,
+    bar: { x: 0, width: 900, right: 900 },
+    lastRight: 892.0000228881836,
+    overflow: false,
+    buttons: 11
+  },
+  studio900: { x: 508, right: 888, bottom: 545.3333435058594 },
+  cards900: [
+    { x: 10, y: 122, right: 350, bottom: 322 },
+    { x: 360, y: 122, right: 700, bottom: 322 },
+    { x: 10, y: 332, right: 350, bottom: 532 },
+    { x: 360, y: 332, right: 700, bottom: 532 }
+  ]
+}

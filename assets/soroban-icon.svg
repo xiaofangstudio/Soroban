@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="g" x1="120" y1="80" x2="880" y2="960" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1cc08c"/>
+      <stop offset="0.55" stop-color="#0e9f6e"/>
+      <stop offset="1" stop-color="#086349"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.20"/>
+      <stop offset="0.45" stop-color="#ffffff" stop-opacity="0.03"/>
+    </linearGradient>
+  </defs>
+  <rect x="72" y="72" width="880" height="880" rx="196" fill="url(#g)"/>
+  <rect x="72" y="72" width="880" height="880" rx="196" fill="url(#sheen)"/>
+  <rect x="196" y="214" width="632" height="596" rx="64" fill="#ffffff" fill-opacity="0.14" stroke="#ffffff" stroke-opacity="0.42" stroke-width="12"/>
+  <rect x="196" y="214" width="632" height="118" rx="64" fill="#ffffff" fill-opacity="0.34"/>
+  <path d="M404 332v478M612 332v478M196 512h632M196 690h632" stroke="#ffffff" stroke-width="16" stroke-opacity="0.9"/>
+  <path d="M404 214v118M612 214v118" stroke="#ffffff" stroke-width="12" stroke-opacity="0.45"/>
+  <rect x="248" y="560" width="104" height="88" rx="18" fill="#ffffff"/>
+  <rect x="456" y="560" width="104" height="88" rx="18" fill="#5ee0a8"/>
+  <rect x="248" y="738" width="104" height="88" rx="18" fill="#ffffff" fill-opacity="0.7"/>
+</svg>

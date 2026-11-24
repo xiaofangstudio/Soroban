@@ -1,0 +1,20 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+*.soroban-tmp
+*.soroban-bak
+npm-install.log
+check-m0.log
+test-m0.log
+build-m0.log
+bundle-m0.log
+dev-m0.log
+e2e-m0-out.txt
+compare-out.txt
+tmp-search.json
+
+# ---- 构建 / 测试临时产物 ----
+*.log
+e2e-out.txt
+tmp-*.json

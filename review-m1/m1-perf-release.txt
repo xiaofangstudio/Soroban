@@ -1,0 +1,9 @@
+open { ms: 14835, rows: 100002, columns: 20, bytes: 10300431 }
+perf {
+  frames: 525,
+  total: 3202.60000001192,
+  averageFrame: 6.08,
+  fps: 164.4,
+  slow: 0
+}
+M1 PERF OK

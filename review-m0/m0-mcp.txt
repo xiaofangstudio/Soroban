@@ -1,0 +1,65 @@
+mcp-stderr: [soroban-mcp] stdio server ready
+init { name: 'soroban', title: 'Soroban 表格工作台', version: '0.1.0' } { tools: { listChanged: false } }
+tools [
+  'soroban_workbook_info',
+  'soroban_validate_xlsx',
+  'soroban_csv_preview'
+]
+info {
+  "bytes": 8577,
+  "entryCount": 17,
+  "hasSharedStrings": true,
+  "hasStyles": true,
+  "name": "M0-样本.xlsx",
+  "path": "D:\\20533\\deskbox\\fangwork\\Papyra\\Soroban\\assets\\M0-样本.xlsx",
+  "sheetCount": 2,
+  "sheets": [
+    "销售",
+    "明细"
+  ]
+}
+validate {
+  "issues": [],
+  "ok": true,
+  "sheetCount": 2,
+  "sheets": [
+    "销售",
+    "明细"
+  ]
+}
+csv {
+  "columns": 4,
+  "delimiter": ",",
+  "headers": [
+    "月份",
+    "销售额",
+    "成本",
+    "备注"
+  ],
+  "path": "D:\\20533\\deskbox\\fangwork\\Papyra\\Soroban\\assets\\M0-样本.csv",
+  "preview": [
+    [
+      "10 月",
+      "128000",
+      "74000",
+      "老客户续约"
+    ],
+    [
+      "11 月",
+      "156400",
+      "88200",
+      "新增两家渠道"
+    ],
+    [
+      "12 月",
+      "189300",
+      "101500",
+      "年末冲刺"
+    ]
+  ],
+  "rows": 3,
+  "truncated": false
+}
+mcp-stderr: [soroban-mcp] bye
+mcp-exit 0
+MCP M0 OK
