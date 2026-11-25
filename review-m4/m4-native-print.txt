@@ -1,0 +1,10 @@
+M4 NATIVE PRINT OK（release 0.5.0）
+入口：顶栏“打印” → 打印预览 → “打印”
+调用：window.print()（WebView2，三平台可用；Tauri WebviewWindow.print() 仅 macOS，已移除）
+系统打印对话框：打印
+总数：2 纸张
+默认布局：纵向
+打印机：OneNote (桌面) - 保护（本机默认）
+打印预览：月度订单 A1:K82，2 页
+截图：409-native-print.png（0.5.0 release）
+关闭方式：结束进程（未实际输出）

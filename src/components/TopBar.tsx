@@ -1,4 +1,4 @@
-import { IconBack, IconFolder, IconRedo, IconSave, IconUndo } from "./Icons";
+import { IconBack, IconFolder, IconPrint, IconRedo, IconSave, IconUndo } from "./Icons";
 
 type Props = {
   name: string;
@@ -14,6 +14,7 @@ type Props = {
   onSave: () => void;
   onUndo: () => void;
   onRedo: () => void;
+  onPrint: () => void;
 };
 
 export function TopBar({
@@ -30,6 +31,7 @@ export function TopBar({
   onSave,
   onUndo,
   onRedo,
+  onPrint,
 }: Props) {
   return (
     <header className="topbar">
@@ -58,6 +60,12 @@ export function TopBar({
         </button>
         <button className="tb-btn" onClick={onRedo} disabled={busy || !canRedo} title="重做 Ctrl+Y">
           <IconRedo width={15} height={15} />
+        </button>
+      </div>
+      <div className="tb-group">
+        <button className="tb-btn wide" onClick={onPrint} disabled={busy} title="打印与分页预览">
+          <IconPrint width={14} height={14} />
+          打印
         </button>
       </div>
       <div className="tb-file">

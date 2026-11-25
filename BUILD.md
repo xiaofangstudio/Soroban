@@ -1,6 +1,6 @@
 # Soroban · 构建与验收
 
-> 小方工作室 · Papyra 办公套件 ｜ 适用 M0 / M1 / M2（v0.3.0）
+> 小方工作室 · Papyra 办公套件 ｜ 适用 M0 / M1 / M2 / M3 / M4（v0.5.0）
 > 开发机：Windows 10/11 + PowerShell 7 + Node 22 + Rust stable + VS Build Tools（Tauri 2 需要 WebView2 与 MSVC）
 
 ## 一 环境
@@ -71,7 +71,7 @@ Soroban/
     src/lib.rs              窗口入口、二进制读写、原子保存
     src/mcp.rs              --mcp stdio 服务（4 个只读工具）
     src/formula_catalog.json 528 函数目录（由脚本生成，编译期内嵌）
-    tauri.conf.json         1280×820，最小 900×600，v0.3.0
+    tauri.conf.json         1280×820，最小 900×600，v0.5.0
     capabilities/           仅 core + dialog
     icons/                  由 assets/*.svg 生成
   assets/
@@ -135,7 +135,7 @@ $env:SOROBAN_EXE='.\Soroban.exe'
 node scripts/e2e-mcp.mjs
 ```
 
-不设 `SOROBAN_EXE` 时用 `src-tauri/target/debug/soroban.exe`；正式验收必须指向根目录 0.3.0 exe。依次调用 initialize / tools/list / workbook_info / validate / csv_preview / formula_search，首行 `serverInfo.version` 应为 `0.3.0`，末行 `MCP M1 OK`。
+不设 `SOROBAN_EXE` 时用 `src-tauri/target/debug/soroban.exe`；正式验收必须指向根目录当前版本 exe。依次调用 initialize / tools/list / workbook_info / validate / csv_preview / formula_search，首行 `serverInfo.version` 应与当前版本一致（0.5.0），末行 `MCP M1 OK`。
 
 也可直接验证：
 
@@ -177,6 +177,33 @@ node scripts/e2e-m2.mjs
 - dev 环境用 `$env:SOROBAN_CDP='9446'`；release 用 9445
 - 样本重建：`node scripts/make-fixture-m2.mjs`
 
+### 4.6 M3 排序 / 筛选 / 冻结 / 工作表 / CSV
+
+```powershell
+$env:SOROBAN_CDP='9445'
+node scripts/e2e-m3.mjs
+```
+
+- 八段全跑：数据工具栏与排序弹层、18 行降序与公式平移、筛选 7/18 与清除、三种冻结、工作表改名 / 复制 / 新建 / 删除、UTF-8 与 GB18030 CSV 导入、CSV 导出 BOM 与回读、筛选状态保存重开、900×620 四类弹层边界
+- 末行依次输出 `M3 UI OK`、`M3 SORT OK`、`M3 FILTER OK`、`M3 FREEZE OK`、`M3 SHEETS OK`、`M3 CSV OK`、`M3 SAVE OK`、`M3 Layout 900 OK`
+- dev 环境用 `$env:SOROBAN_CDP='9446'`；release 用 9445
+- 样本重建：`node scripts/make-fixture-m3.mjs`
+- E2E 会生成 `review-m3/M3-筛选保存.xlsx`、`M3-导出.csv`、`M3-导出回读.xlsx`，跑完需清理，正式截图只留 `300–317`
+
+### 4.7 M4 打印 / A4 分页 / 页眉页脚
+
+```powershell
+$env:SOROBAN_CDP='9445'
+node scripts/e2e-m4.mjs
+```
+
+- 十二段全跑：工作台与 A4 纵向 2 页、横向 4 页、100% 10 页、关闭网格 / 页眉 / 页脚、非法区域拦截、`A1:G20` 单页、当前选区 + sidecar 重开、打印媒体尺寸、900×620、`window.print` 调用、打印态 PDF、筛选后只打印可见行
+- 末行依次输出 `M4 PRINT UI OK`、`M4 LANDSCAPE OK`、`M4 SCALE OK`、`M4 CHROME OK`、`M4 AREA ERROR OK`、`M4 AREA OK`、`M4 SELECTION OK`、`M4 PRINT MEDIA OK`、`M4 900 OK`、`M4 PRINT CALL OK`、`M4 PDF OK`、`M4 FILTER PRINT OK`，最后 `ALL M4 UI CHECKS PASSED`
+- dev 环境用 `$env:SOROBAN_CDP='9446'`；release 用 9445。E2E 会覆盖生成 `review-m4/400–412` 截图与 `m4-print-preview.pdf`
+- 样本重建：`node scripts/make-fixture-m4.mjs`
+- 原生对话框单独复验：release 打开样本 → 打印 → 打印，系统窗口应显示「总数: 2 纸张」；截图 `review-m4/409-native-print.png`
+- E2E 退出后如需清理文档状态，杀掉 Soroban 进程再重开，避免打印预览窗口挡住后续操作
+
 ## 五 构建
 
 ```powershell
@@ -198,7 +225,7 @@ Copy-Item src-tauri\target\release\soroban.exe .\Soroban.exe -Force
 - **版式修复**：部分 xlsx 不带行高，桥接库返回 `h=0 / ah=0` 会让网格空白；`normalizeLayout()` 回填 `defaultRowHeight` / `defaultColumnWidth`，零宽列同步修复
 - **大小上限**：M0 前端限制 80MB；超出直接中文报错，不尝试解析
 
-## 七 M0 / M1 / M2 验收记录
+## 七 M0 / M1 / M2 / M3 / M4 验收记录
 
 | 项 | 结果 |
 | --- | --- |
@@ -216,7 +243,7 @@ Copy-Item src-tauri\target\release\soroban.exe .\Soroban.exe -Force
 
 日志：`review-m0/m0-ui-release.txt`、`review-m0/m0-mcp-release.txt`、`review-m0/m0-layout-release.txt`、`review-m0/m0-rust-test.txt`。
 
-### M0 产物（历史，根目录已由 0.3.0 替换）
+### M0 产物（历史，根目录已由 0.5.0 替换）
 
 | 产物 | 大小 | SHA-256 |
 | --- | --- | --- |
@@ -280,15 +307,81 @@ Copy-Item src-tauri\target\release\soroban.exe .\Soroban.exe -Force
 
 均未签名。旧 0.2.0 安装包已从根目录移除。
 
+### 7.9 M3 验收记录（v0.4.0）
+
+| 项 | 结果 |
+| --- | --- |
+| 排序 | 18 行金额降序 268000→42100；`G2:G19` 公式平移正确；合计 2330900 / 745888 |
+| 筛选 | `{matched:7,total:18}`，hidden 11，表头可见，`筛选 7/18`；清除后恢复 |
+| 冻结 | 首行 `{1,0}`、B2 `{1,1}`、取消 `null` |
+| 工作表 | 2 表改名 / 复制 3 表 / 新建 4 表 / 删除 3 表 |
+| CSV 导入 | UTF-8 4 行、GB18030 4 行；逗号 / 引号 / 单元格换行正确 |
+| CSV 导出 | 1,258 B，UTF-8 BOM；回读 xlsx 7,814 B，合计 2330900 |
+| 保存重开 | 2 sheets、hidden 0、filter null、18 行、`G2=D2*0.32`、总毛利 745888 |
+| 900 窄窗 | 工具栏 900×33；四类弹层全部在 900×620 内 |
+| M3 E2E | `M3 UI OK` / `M3 SORT OK` / `M3 FILTER OK` / `M3 FREEZE OK` / `M3 SHEETS OK` / `M3 CSV OK` / `M3 SAVE OK` / `M3 Layout 900 OK` |
+| MCP | version 0.4.0，4 工具，`MCP M1 OK` |
+
+截图：`review-m3/300-sort-panel.png` 至 `317-sheets-900.png`，共 18 张，由 release 0.4.0 复验生成；日志 `m3-e2e-release.txt`、`mcp-m3-release.txt`。
+
+### 7.10 M3 产物
+
+| 产物 | 大小 | SHA-256 |
+| --- | --- | --- |
+| `Soroban.exe` | 6,939,136 B | `1CEF46C6FE4E202FE0FE8161457A9244F8976BA29B326B9E41645899C183265F` |
+| `Soroban_0.4.0_x64-setup.exe` | 4,319,948 B | `3A46414CF65870EF4E2495095E2CCBECAED7153DF694416F6BB95FBBD1EAC82D` |
+
+均未签名。旧 0.3.0 安装包已从根目录移除。
+
+### 7.11 M4 验收记录（v0.5.0）
+
+| 项 | 结果 |
+| --- | --- |
+| 默认纵向 | A4 2 页，48 + 33 行，适应页宽 62% |
+| 横向 | A4 4 页，适应页宽 91% |
+| 横向 100% | 10 页，列带 A–H / I–K 两段，末带均衡 |
+| 关闭装饰 | 网格 / 页眉 / 页脚均不渲染，纸张仍为 A4 |
+| 非法区域 | `A1::K82` 红字提示，打印按钮 disabled |
+| 指定区域 | `A1:G20` 1 页 19 行；当前选区 `A1:G16` 1 页 |
+| sidecar | 关闭重开仍 `A1:G16`、横向、适应页宽 |
+| 打印媒体 | 793.7×1122.5px、`zoom=1`、表格 972 / 993px、页间 0 |
+| 900 窄窗 | 窗口 880×600，纸张宽 349px，按钮可见，顶栏无溢出 |
+| 原生调用 | `window.print` 拦截计数 1，按钮恢复「打印」 |
+| PDF | 2 页、406,064 B、594.96×841.92pt；表头逐页重复、合计加粗 |
+| 筛选打印 | 「待发货」20/81，工作台 1 页、只输出 20 行 |
+| 原生对话框 | 「总数: 2 纸张」、纵向、全部，未实际出纸 |
+| MCP | version 0.5.0，4 工具，`MCP M1 OK` |
+| Rust | 6 passed |
+| M4 E2E | 十二行 `M4 … OK`，末行 `ALL M4 UI CHECKS PASSED` |
+
+截图：`review-m4/400-print-studio.png` 至 `412-print-filtered.png`，另 `410/411-pdf-page-*.png`；全部由 release 0.5.0 复验生成。日志 `m4-e2e-release.txt`、`mcp-m4-release.txt`、`m4-native-print.txt`、`m4-build-release.txt`。
+
+### 7.12 M4 产物
+
+| 产物 | 大小 | SHA-256 |
+| --- | --- | --- |
+| `Soroban.exe` | 6,944,256 B | `28267EF304C6AD00952C8A0B62E64761E331BA2F601AAE5FBD0A9B52A7ABAF4C` |
+| `Soroban_0.5.0_x64-setup.exe` | 4,325,052 B | `427DB503D7325486B4CA577EC3D54A79C28B036B8357F719C15A10FE2EA98580` |
+
+均未签名。旧 0.4.0 安装包已从根目录移除。
+
 ## 八 已知问题
 
 - Univer OSS 无 xlsx 转换后端，导出走 MIT 桥接库；图片等复杂对象仍未验证
 - 图表与条件格式只存 localStorage sidecar（`soroban:charts:*` / `soroban:cf:*`），不随 xlsx 走：换路径、换机器或 Excel 打开都看不到
 - 图表仅支持单表区域、首行表头 + 首列分类；无多区域 / 跨表 / 堆叠 / 次坐标轴 / 缩放
+- 排序一期单列单键、仅升 / 降序；多键与自定义序列未开放
+- 筛选一期单列单条件，多列与 / 或未开放；筛选只是视图态，保存时清空，不写进 xlsx
+- CSV 导入为前端一次性读入，无 Rust 流式通道；编码与分隔符自动识别，导入结果为新工作簿；导出含合计行、公式按值写出
+- 保存往返按 Univer 行高 / 列宽规范化写回，默认行高不逐像素保留
 - 桥接库控制台会打印大量 `[LuckyFile]` / `[PACKAGE]` 日志，暂保留以便排查
-- Vite 打包主 chunk 约 9.8MB（Univer + exceljs + SheetJS），M3 做 manualChunks 与函数表懒加载
-- 十万行 / 10MB 首次导入 release 18.5s、M1 记录 14.8s；M3 评估 SheetJS 快路径
-- M1 记录的绿色小角标在 M2 验收截图中未复现；值 / 公式 / 保存正常，继续观察
-- 最近文件存在 localStorage，不含缩略图；M3 接入 `sheet_thumb` 后补卡片预览
+- Vite 打包主 chunk 约 9.86MB（Univer + exceljs + SheetJS），manualChunks 与函数表懒加载留 M4
+- 打印仅 A4 纵 / 横，页边距固定 12mm；无手动分页符、多行标题、图片 Logo；上限 10 万格 / 80 页
+- 打印输出按单元格显示值，不重算公式、不还原完整字体 / 边框 / 条件格式，图表与图片不进打印
+- 打印设置只存 localStorage sidecar，不写 xlsx；区域按 sheet 记忆但换机 / 换路径不携带
+- 原生打印依赖 WebView2 `window.print()`，只验证对话框与页数，未实际出纸
+- 十万行 / 10MB 首次导入 release 18.5s（M2 记录）；M3 未重跑，SheetJS 快路径留 M4 评估
+- M1 记录的绿色小角标在 M2 / M3 验收截图中未复现；值 / 公式 / 保存正常，继续观察
+- 最近文件存在 localStorage，不含缩略图；`sheet_thumb` 卡片预览留 M4
 
 *小方工作室 · Soroban · BUILD ｜ 2026-11-24*

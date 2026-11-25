@@ -13,6 +13,8 @@ import {
   type RecentFile,
 } from "./lib/recents";
 import { fileExists, fileSize, readFileBytes, writeFileBytes } from "./lib/tauri";
+import { csvRowsToCellValues, decodeCsvBytes } from "./lib/data";
+import type { CsvCell } from "./lib/data";
 
 type Screen = "splash" | "welcome" | "editor";
 
@@ -22,11 +24,14 @@ type DocRef = {
   name: string;
   bytes: Uint8Array | null;
   size: number;
+  csvRows?: CsvCell[][] | null;
+  csvSheetName?: string;
 };
 
 type Toast = { text: string; kind: "ok" | "error"; id: number };
 
 const XLSX_FILTER = [{ name: "Excel 工作簿", extensions: ["xlsx"] }];
+const CSV_FILTER = [{ name: "CSV 文件", extensions: ["csv"] }];
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("splash");
@@ -110,6 +115,7 @@ export default function App() {
       name: "未命名表格.xlsx",
       bytes: null,
       size: 0,
+      csvRows: null,
     });
     setDirty(false);
     setCanUndo(false);
@@ -134,7 +140,7 @@ export default function App() {
         if (size > 80 * 1024 * 1024) throw new Error("文件超过 80MB，M0 暂不打开");
         const bytes = await readFileBytes(path);
         const name = baseName(path);
-        setDoc({ key: `open-${Date.now()}`, path, name, bytes, size });
+        setDoc({ key: `open-${Date.now()}`, path, name, bytes, size, csvRows: null });
         setDirty(false);
         setCanUndo(false);
         setCanRedo(false);
@@ -154,6 +160,68 @@ export default function App() {
     },
     [confirmDiscard, notify],
   );
+
+  const importCsvPath = useCallback(
+    async (path: string, options?: { skipConfirm?: boolean }) => {
+      if (busyRef.current) return false;
+      if (!options?.skipConfirm && !confirmDiscard()) return false;
+      setBusy(true);
+      setStatusText("正在导入 CSV…");
+      setStatusKind("busy");
+      try {
+        const size = await fileSize(path);
+        if (size === 0) throw new Error("CSV 为空或无法读取");
+        if (size > 80 * 1024 * 1024) throw new Error("CSV 超过 80MB，暂不导入");
+        const bytes = await readFileBytes(path);
+        const { rows: textRows, encoding } = decodeCsvBytes(bytes);
+        if (textRows.length === 0) throw new Error("CSV 没有可导入的内容");
+        const sourceName = baseName(path);
+        const base = sourceName.replace(/\.csv$/i, "") || "CSV 导入";
+        const rows = csvRowsToCellValues(textRows);
+        setDoc({
+          key: `csv-${Date.now()}`,
+          path: null,
+          name: `${base}.xlsx`,
+          bytes: null,
+          size,
+          csvRows: rows,
+          csvSheetName: base,
+        });
+        setDirty(true);
+        setCanUndo(false);
+        setCanRedo(false);
+        setSheets(1);
+        setStatusText("已导入 CSV");
+        setStatusKind("ok");
+        setScreen("editor");
+        notify(`已导入 ${sourceName} · ${encoding} · ${textRows.length} 行`);
+        return true;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        setStatusText("导入失败");
+        setStatusKind("error");
+        notify(`CSV 导入失败：${message}`, "error");
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [confirmDiscard, notify],
+  );
+
+  const pickAndImportCsv = useCallback(async () => {
+    if (busyRef.current) return;
+    try {
+      const picked = await openDialog({
+        multiple: false,
+        directory: false,
+        filters: CSV_FILTER,
+      });
+      if (typeof picked === "string") await importCsvPath(picked);
+    } catch (err) {
+      notify(`无法打开文件选择器：${err instanceof Error ? err.message : String(err)}`, "error");
+    }
+  }, [importCsvPath, notify]);
 
   const pickAndOpen = useCallback(async () => {
     if (busyRef.current) return;
@@ -180,7 +248,7 @@ export default function App() {
         const size = await writeFileBytes(target, bytes);
         const name = baseName(target);
         const sheetCount = editorRef.current.sheetCount() || 1;
-        setDoc((cur) => (cur ? { ...cur, path: target, name, size } : cur));
+        setDoc((cur) => (cur ? { ...cur, path: target, name, size, csvRows: null, csvSheetName: undefined } : cur));
         setDirty(false);
         setRecent(rememberRecent({ path: target, name, sheets: sheetCount, size }));
         setStatusText("已保存到本机");
@@ -217,6 +285,51 @@ export default function App() {
       notify(`无法打开保存对话框：${err instanceof Error ? err.message : String(err)}`, "error");
     }
   }, [notify, saveTo]);
+
+  const saveCsvTo = useCallback(
+    async (target: string) => {
+      if (!editorRef.current || busyRef.current) return null;
+      setBusy(true);
+      setStatusText("正在导出 CSV…");
+      setStatusKind("busy");
+      try {
+        const text = editorRef.current.csvText();
+        const encoded = new TextEncoder().encode(text);
+        const bytes = new Uint8Array(encoded.length + 3);
+        bytes.set([0xef, 0xbb, 0xbf], 0);
+        bytes.set(encoded, 3);
+        const size = await writeFileBytes(target, bytes);
+        setStatusText("已导出 CSV");
+        setStatusKind("ok");
+        notify(`已导出 ${baseName(target)} · ${formatBytes(size)}`);
+        return { size };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        setStatusText("导出 CSV 失败");
+        setStatusKind("error");
+        notify(`导出 CSV 失败：${message}`, "error");
+        return null;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [notify],
+  );
+
+  const exportCsv = useCallback(async () => {
+    if (!editorRef.current || busyRef.current) return;
+    const current = docRef.current;
+    const base = (current?.name || "表格").replace(/\.(xlsx|csv)$/i, "");
+    try {
+      const picked = await saveDialog({
+        defaultPath: `${base}.csv`,
+        filters: CSV_FILTER,
+      });
+      if (typeof picked === "string") await saveCsvTo(picked);
+    } catch (err) {
+      notify(`无法打开保存对话框：${err instanceof Error ? err.message : String(err)}`, "error");
+    }
+  }, [notify, saveCsvTo]);
 
   const backToWelcome = useCallback(() => {
     if (busyRef.current) return;
@@ -278,6 +391,26 @@ export default function App() {
       selectionA1: () => editorRef.current?.selectionA1() ?? null,
       conditionalRuleCount: () => editorRef.current?.conditionalRuleCount() ?? 0,
       cellStyle: (row: number, column: number) => editorRef.current?.cellStyle(row, column) ?? null,
+      sortBy: (direction: "asc" | "desc", column?: number) =>
+        editorRef.current?.sortBy(direction, column) ?? { ok: false, message: "尚未就绪" },
+      filterBy: (column: number, operator: "contains" | "gt" | "lt" | "eq" | "ne", value: string) =>
+        editorRef.current?.filterBy(column, operator, value) ?? { ok: false, message: "尚未就绪" },
+      clearFilter: () => editorRef.current?.clearFilter(),
+      filterInfo: () => editorRef.current?.filterInfo() ?? null,
+      freeze: (kind: "first-row" | "first-col" | "at-cell" | "none") =>
+        editorRef.current?.freeze(kind) ?? { ok: false, message: "尚未就绪" },
+      freezeState: () => editorRef.current?.freezeState() ?? null,
+      sheetNames: () => editorRef.current?.sheetNames() ?? [],
+      activeSheetName: () => editorRef.current?.activeSheetName() ?? "",
+      renameSheet: (name: string) => editorRef.current?.renameSheet(name) ?? false,
+      duplicateSheet: () => editorRef.current?.duplicateSheet() ?? null,
+      deleteSheet: () => editorRef.current?.deleteSheet() ?? false,
+      csvText: () => editorRef.current?.csvText() ?? "",
+      hiddenRows: () => editorRef.current?.hiddenRows() ?? 0,
+      importCsv: (path: string) => importCsvPath(path, { skipConfirm: true }),
+      exportCsv: (path: string) => saveCsvTo(path),
+      openPrint: () => editorRef.current?.openPrint(),
+      printInfo: () => editorRef.current?.printInfo() ?? null,
     };
   });
 
@@ -322,6 +455,7 @@ export default function App() {
               setCanUndo(true);
               setCanRedo(true);
             }}
+            onPrint={() => editorRef.current?.openPrint()}
           />
           <SheetEditor
             ref={editorRef}
@@ -329,10 +463,13 @@ export default function App() {
             docPath={doc.path}
             name={doc.name}
             bytes={doc.bytes}
+            initialRows={doc.csvRows}
+            initialSheetName={doc.csvSheetName}
             onReady={(count) => {
+              const imported = Boolean(doc.csvRows?.length);
               setSheets(count || 1);
-              setDirty(false);
-              setStatusText(doc.path ? "已保存到本机" : "未保存");
+              setDirty(imported);
+              setStatusText(imported ? "已导入 CSV" : doc.path ? "已保存到本机" : "未保存");
               setStatusKind("ok");
               if (doc.path) {
                 setRecent(
@@ -347,6 +484,9 @@ export default function App() {
             }}
             onSheetCount={(count) => setSheets(count || 1)}
             onDirty={markDirty}
+            onInfo={(message) => notify(message)}
+            onCsvImport={() => void pickAndImportCsv()}
+            onCsvExport={() => void exportCsv()}
             onError={(message) => notify(`表格错误：${message}`, "error")}
             onState={(state, message) => {
               if (state === "loading") {
