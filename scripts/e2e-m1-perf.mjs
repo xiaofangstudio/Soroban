@@ -23,7 +23,7 @@ page.on("console", (message) => {
 });
 page.on("pageerror", (error) => errors.push(String(error)));
 
-await page.reload({ waitUntil: "networkidle2" });
+await page.reload({ waitUntil: "domcontentloaded", timeout: 90000 });
 await page.waitForSelector(".welcome", { timeout: 20000 });
 const started = Date.now();
 await page.evaluate((file) => window.__soroban.openPath(file), large);

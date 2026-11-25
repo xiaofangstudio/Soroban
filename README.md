@@ -1,6 +1,6 @@
 # Soroban · 小方工作室表格计算
 
-> **小方工作室 · 出品** ｜ 立项规格 `v1.0` ｜ 2026-11-25 ｜ 状态：M4 已完成（打印区域 / A4 分页预览 / 页眉页脚 / 缩放打印，版本 0.5.0；M3 排序筛选 / 多 sheet / 冻结 / CSV 双向，0.4.0；M2 格式 / 条件格式 / 四图表联动 / xlsx 往返，0.3.0；M1 528 函数 / 跨表引用 / 10 万行 / MCP，0.2.0）
+> **小方工作室 · 出品** ｜ 立项规格 `v1.0` ｜ 2026-11-25 ｜ 状态：一期 M0–M4 已交付，**0.6.1 渲染收敛：大表只画视口、CSV 导入不选整块、打印预览与图表浮层跳过屏外绘制**；0.6.0 补齐查找替换 / 60 秒自动保存 / 自定义序列排序 / 工作表标签颜色 / CSV 导入预览；0.5.1 多键排序 / 多条件筛选（与 / 或）；M4 打印区域 / A4 分页预览 / 页眉页脚 / 缩放打印（0.5.0）；M3 排序筛选 / 多 sheet / 冻结 / CSV 双向（0.4.0）；M2 格式 / 条件格式 / 四图表联动 / xlsx 往返（0.3.0）；M1 528 函数 / 跨表引用 / 10 万行 / MCP（0.2.0）
 > 对标 Microsoft Excel / LibreOffice Calc ｜ 全中文 ｜ 本地优先 ｜ 零账号 ｜ 零 AI ｜ MIT
 > **Papyra 办公套件四件套之二**
 > 套件分色：Penna 靛蓝 · **Soroban 翠绿** · Lanterna 橙红 · Voluma 绛红
@@ -441,7 +441,7 @@ M4 出口「能出：打印区域 + 分页预览 + 页眉页脚」已达成，�
 
 ### 15.1 本期能力
 
-- **打印入口**：顶栏「打印」按钮（`IconPrint`），从编辑器直接打开全屏打印工作台，不离开当前表格。
+- **打印入口**：顶栏「打印」按钮（`IconPrint`），从编辑器直接打开全屏打印工作台，不离开当前表格；`Ctrl+P` 同效，按钮提示带快捷键。
 - **打印工作台**：`createPortal` 门户式两栏——左栏打印设置、右栏 A4 纸张预览；顶部显示「打印预览 · 表名 · 区域」，右上 A4 徽标（方向 + 页数），底部「取消 / 打印」，`Escape` 关闭。
 - **打印区域**：支持手输 `A1` / `A1:H20`、一键「当前选区」、一键「全部数据」；非法格式当场红字提示并禁用打印按钮；区域上限 10 万单元格。区域按工作表记忆，切换 sheet 不会套用别表的区域。
 - **A4 分页**：纵向 210×297mm、横向 297×210mm，四边 12mm 页边距；页眉 21px、页脚 18px、页间 8px；按列宽做列带分页，再按行高分页；每页重复表头；识别 `合计/总计/小计/total/subtotal` 行并加粗；最多 80 页，超限给出中文提示。
@@ -465,7 +465,7 @@ M4 出口「能出：打印区域 + 分页预览 + 页眉页脚」已达成，�
 
 样本 `assets/M4-打印.xlsx`（12,582 B）：sheet「月度订单」A1:K82，11 列（订单号 / 客户 / 城市 / 产品 / 数量 / 单价 / 金额 / 状态 / 负责人 / 日期 / 备注），80 笔订单第 2–81 行，第 82 行合计；首行冻结；列宽合计约 1,140px。
 
-- release E2E：`$env:SOROBAN_CDP='9445'; node scripts/e2e-m4.mjs`，全部通过并输出 `M4 PRINT UI OK`、`M4 LANDSCAPE OK`、`M4 SCALE OK`、`M4 CHROME OK`、`M4 AREA ERROR OK`、`M4 AREA OK`、`M4 SELECTION OK`、`M4 PRINT MEDIA OK`、`M4 900 OK`、`M4 PRINT CALL OK`、`M4 PDF OK`、`M4 FILTER PRINT OK`，末行 `ALL M4 UI CHECKS PASSED`。
+- release E2E：`$env:SOROBAN_CDP='9445'; node scripts/e2e-m4.mjs`，全部通过并输出 `M4 PRINT UI OK`、`M4 LANDSCAPE OK`、`M4 SCALE OK`、`M4 CHROME OK`、`M4 AREA ERROR OK`、`M4 AREA OK`、`M4 SELECTION OK`、`M4 PRINT MEDIA OK`、`M4 900 OK`、`M4 PRINT CALL OK`、`M4 PDF OK`、`M4 FILTER PRINT OK`、`M4 SHORTCUT OK`，末行 `ALL M4 UI CHECKS PASSED`。
 - 默认纵向：A4 2 页，48 + 33 行，适应页宽缩放 62%。
 - 横向：A4 4 页，适应页宽 91%。
 - 横向 100%：10 页，按列带分 2 段（A–H / I–K），列带均衡生效。
@@ -475,14 +475,15 @@ M4 出口「能出：打印区域 + 分页预览 + 页眉页脚」已达成，�
 - 打印媒体：纸张 793.7×1122.5px（210×297mm）、`zoom=1`、表格 972 / 993px 不溢出，页间 gap 0。
 - 900×620：窗口 880×600 内，A4 预览宽 349px，纸张与按钮均在视口内，顶栏无横向溢出。
 - 原生调用：拦截 `window.print` 验证点击「打印」只调用 1 次，按钮恢复为「打印」。
+- 快捷键：`Ctrl+P` 直接打开打印工作台，E2E 断言通过，`Escape` 正常关闭。
 - PDF：`m4-print-preview.pdf` 2 页、406,064 B；页面 594.96×841.92pt（210×297mm）；第 1 页 48 行、第 2 页 33 行 + 合计，表头逐页重复，页脚 `小方工作室 / 第 X / 2 页 / 2026-11-25`。
 - 筛选后打印：筛「待发货」命中 20/81，工作台仅 1 页、可见 20 行，隐藏行未输出。
 - 原生对话框：0.5.0 release 实测「打印 / 总数: 2 纸张 / 纵向 / 全部」，默认打印机 OneNote，未实际出纸。
 - MCP：`version 0.5.0`，4 工具（workbook_info / validate_xlsx / csv_preview / formula_search），`MCP M1 OK`。
 - Rust：6 passed（MCP 路径、CSV、工作簿、校验、函数库）。
-- 构建：`tsc && vite build` 1912 modules，主 JS 9,877.00 kB、CSS 162.71 kB；release profile 1m 46s，NSIS 4.12 MiB。
+- 构建：`tsc && vite build` 1912 modules，主 JS 9,877.08 kB、CSS 162.71 kB；release profile 1m 07s，NSIS 4.12 MiB。
 
-截图在 `review-m4/`：`400-print-studio.png`、`401-print-landscape.png`、`402-print-percent100.png`、`403-print-bare.png`、`404-print-area-error.png`、`405-print-area.png`、`406-print-selection.png`、`407-print-900.png`、`408-editor-900.png`、`409-native-print.png`、`410-pdf-page-1.png`、`411-pdf-page-2.png`、`412-print-filtered.png`；另 `m4-print-preview.pdf`、`m4-e2e-release.txt`、`mcp-m4-release.txt`、`m4-native-print.txt`、`m4-build-release.txt`。全部截图与 PDF 都由 0.5.0 release 生成。
+截图在 `review-m4/`：`400-print-studio.png`、`401-print-landscape.png`、`402-print-percent100.png`、`403-print-bare.png`、`404-print-area-error.png`、`405-print-area.png`、`406-print-selection.png`、`407-print-900.png`、`408-editor-900.png`、`409-native-print.png`、`410-pdf-page-1.png`、`411-pdf-page-2.png`、`412-print-filtered.png`；另 `m4-print-preview.pdf`、`m4-e2e-release.txt`、`mcp-m4-release.txt`、`m4-native-print.txt`、`m4-build-release.txt`。0.5.1 回跑后 `400–412`、PDF 与 `m4-e2e-release.txt` 已被新版覆盖，指标一致；`409-native-print.png` 仍是 0.5.0 原生对话框记录。
 
 ### 15.4 M4 已知边界
 
@@ -500,9 +501,168 @@ M4 出口「能出：打印区域 + 分页预览 + 页眉页脚」已达成，�
 
 | 文件 | 大小 | SHA-256 |
 |---|---:|---|
-| `Soroban.exe` | 6,944,256 B（6.62 MB） | `28267EF304C6AD00952C8A0B62E64761E331BA2F601AAE5FBD0A9B52A7ABAF4C` |
-| `Soroban_0.5.0_x64-setup.exe` | 4,325,052 B（4.12 MB） | `427DB503D7325486B4CA577EC3D54A79C28B036B8357F719C15A10FE2EA98580` |
+| `Soroban.exe` | 6,944,256 B（6.62 MB） | `723024ABD15E6D2B1F7E6CD33C0B1A4DE2C9B3B3DF6ABC8A39A0398F1D168717` |
+| `Soroban_0.5.0_x64-setup.exe` | 4,325,110 B（4.12 MB） | `42F88E9FA861FE5DB5952CB3A1A46C1723515BF64BEF04CD8FA70185B71A90B0` |
 
-release 构建：`npm run tauri build`，release profile 1m 46s，NSIS 4.12 MiB；产物已复制到 `Soroban/` 与套件根目录，均未签名。旧 0.4.0 安装包已从根目录移除，M0–M3 产物记录保留作历史。
+release 构建：`npm run tauri build`，release profile 1m 07s，NSIS 4.12 MiB；产物已复制到 `Soroban/` 与套件根目录，均未签名。旧 0.4.0 安装包已从根目录移除，M0–M3 产物记录保留作历史。
+
+### 15.6 0.5.0 回归（M0–M3）
+
+在 0.5.0 release 上重跑旧里程碑，确认 M4 打印改动无回归：
+
+- M0：`M0 UI OK`，欢迎页 / 新建 / 打开 / 公式栏 / 保存重开全过；900 布局 `Layout 900 OK`
+- M1：`M1 UI OK`，提示卡 SUM、函数库 528、跨表汇总 375000 / 345000、保存 9,773 B；`M1 Layout 900 OK`
+- M2：`M2 UI OK` / `M2 Layout 900 OK` / `M2 CHARTS OK` / `M2 ROUNDTRIP OK`，格式、CF、四图表、重开全过
+- M3：`M3 UI OK` / `M3 SORT OK` / `M3 FILTER OK` / `M3 FREEZE OK` / `M3 SHEETS OK` / `M3 CSV OK` / `M3 SAVE OK` / `M3 Layout 900 OK`
+- 回归脚本修正：`e2e-m1` / `e2e-m1-layout` 在点击公式栏后等待一帧再输入，避免自动化抢在聚焦选中前吞掉首个 `=`；产品输入本身无问题
+- 日志：`review-m4/regression-m0.txt`、`regression-m0-layout.txt`、`regression-m1.txt`、`regression-m1-layout.txt`、`regression-m2.txt`、`regression-m3.txt`
 
 *小方工作室 · Soroban · M4 实装记录 ｜ Papyra 办公套件 ｜ 2026-11-25*
+
+## 十六 0.5.1 多键排序 / 多条件筛选（2026-11-25）
+
+一期 M3 只开放单列排序与单条件筛选。0.5.1 在保持旧 API、旧保存行为不变的前提下补齐这两项硬指标，版本升至 `0.5.1`。
+
+### 16.1 本期能力
+
+- **多键排序**：`SortKey[]`，每项 `{column,direction}`；最多 3 个键、列不重复；按顺序逐键比较，数字优先比数值，文本用 `localeCompare(..., "zh-CN", {numeric:true})`；第 1 键相同才看第 2 键。
+- **公式随行**：排序后仍执行原有公式行平移，`=Dn*0.32` 跟着数据行走；合计、毛利、跨表引用结果保持正确。
+- **多条件筛选**：`FilterCondition[]` + 全局模式 `and | or`（「全部条件 / 任一条件」）；最多 3 条，允许同列多条件；条件值留空不参与筛选。
+- **兼容旧接口**：`sortBy(direction, column)` 与 `filterBy(column, operator, value)` 保留并分别委托到 `sortByKeys` / `filterByConditions`；`__soroban` 新增 `sortByKeys` 与 `filterByConditions`，供 E2E 调用。
+- **旧返回形状不变**：单条件 `filterInfo()` 仍是原五字段 `columnLabel / operator / value / matched / total`，M3 的 deepEqual 不受影响；只有多条件才附加 `conditions` 与 `mode`。
+- **按钮与面板**：多条件激活时按钮显示 `筛选 10/18 · 2条件`，单条件仍是 `筛选 7/18`；排序弹层为可增删的条件行（列 + 升/降 + 删除），筛选弹层顶部可切「全部 / 任一条件」，下面为条件行（列 + 操作符 + 值 + 删除）。
+- **面板尺寸**：排序 292px、筛选 348px；`.sort-key-row` / `.filter-cond-row` / `.filter-mode` / `.data-add-row` / `.cond-del` 统一控件高度；弹层 `overflow-x:hidden`，说明文字可换行，不再出现横向滚动条。
+- **状态保持**：重新打开筛选弹层时沿用当前 `and / or` 模式，不会把已生效的「任一条件」显示成「全部条件」。
+
+### 16.2 验收结果（release 0.5.1）
+
+样本仍用 `assets/M3-整理.xlsx`：18 行订单，E 状态、D 金额、G 毛利公式。
+
+- 多键排序：E 状态升序 + D 金额降序，状态非降、同状态金额非升；18 行公式全部为 `=Dn*0.32`；金额合计 2,330,900。
+- AND 筛选：E = 已完成 且 D > 100000，命中 6/18，隐藏 12 行。
+- OR 筛选：E = 已完成 或 E = 待发货，命中 10/18。
+- 模式保持：重开筛选面板仍为「任一条件」，通过。
+- 900×620：双键排序面板 right 300 / bottom 306，无横向溢出；筛选 348px 宽同样不越界。
+- M3 回归：`M3 UI OK` / `M3 SORT OK` / `M3 FILTER OK` / `M3 FREEZE OK` / `M3 SHEETS OK` / `M3 CSV OK` / `M3 SAVE OK` / `M3 Layout 900 OK`。
+- M4 回归：13 项打印检查全过，`ALL M4 UI CHECKS PASSED`。
+- M0 / M1 / M2 回归：`M0 UI OK` / `Layout 900 OK` / `M1 UI OK` / `M1 Layout 900 OK` / `M2 UI OK` / `M2 Layout 900 OK` / `M2 CHARTS OK` / `M2 ROUNDTRIP OK`。
+- MCP：`version 0.5.1`，4 工具（workbook_info / validate_xlsx / csv_preview / formula_search），`MCP M1 OK`。
+- Rust：6 passed（MCP 路径、CSV、工作簿、校验、函数库）。
+- 构建：`tsc && vite build` 1912 modules，主 JS 9,880.45 kB、CSS 164.26 kB；release profile 1m 11s，NSIS 4.13 MiB。
+
+正式截图在 `review-0.5.1/`：`500-multi-sort.png`、`501-filter-and.png`、`502-filter-or.png`、`503-multi-sort-900.png`；M3 回归截图在 `review-0.5.1/m3-release/`。日志：`e2e-release.txt`、`e2e-dev.txt`、`m3-release.txt`、`m3-regression.txt`、`review-m4/m4-e2e-release.txt`、`m4-regression-dev.txt`、`mcp-release.txt`、`rust-test-release.txt`、`build-release.txt`。
+
+### 16.3 已知边界
+
+- 排序键最多 3 个、筛选条件最多 3 条；超出只能删旧再加，不提供无限堆叠。
+- 筛选只有全局 AND / OR，不做逐条混合布尔优先级，也没有括号分组。
+- 排序与筛选都不写进 xlsx：排序是即时重排数据，筛选只是视图隐藏；保存时会清筛选，重开回到原顺序。
+- 不提供自定义序列、按颜色 / 图标排序、筛选搜索框、数值区间双端输入；这些留后续批次。
+
+### 16.4 产物（v0.5.1）
+
+| 文件 | 大小 | SHA-256 |
+|---|---:|---|
+| `Soroban.exe` | 6,945,792 B（6.62 MB） | `612D77D2227CBFB679ADEF4FA6F1BC425C73AD8D19773BD83F322B712FFFD808` |
+| `Soroban_0.5.1_x64-setup.exe` | 4,326,136 B（4.13 MB） | `30524F740DF52F74D38BE8FD951FF4D731CA3EF3AE9AC9902CA995AAA47E80EE` |
+
+产物已复制到 `Soroban/` 与套件根目录，均未签名；旧 0.5.0 安装包已移除，0.5.0 的哈希与验收记录保留作历史。
+
+*小方工作室 · Soroban · 0.5.1 多键排序 / 多条件筛选 ｜ Papyra 办公套件 ｜ 2026-11-25*
+
+## 十七 0.6.0 编辑效率与导入体验（2026-11-25）
+
+0.6.0 补的是一期里“每天都会用到、但 0.5.1 还没做”的五件事：查找替换、自动保存、自定义序列排序、工作表标签颜色、CSV 导入预览。版本升至 `0.6.0`，M0–M4 原有能力不回退。
+
+### 17.1 本期能力
+
+- **查找与替换**：`Ctrl+F` 打开查找，`Ctrl+H` 直接展开替换；公式栏右侧放大镜可点开。默认扫描当前工作表已用区域（约 200 万格上限），不区分大小写可切；`Enter` 下一个、`Shift+Enter` 上一个，命中处自动选中并提示“第 n / N 处”。
+- **替换规则**：普通单元格支持“替换”与“全部替换”；公式单元格只查找、不替换，提示“公式单元格只查找、不替换”，避免把公式算成文本。替换后重新扫描命中数，替换空串等价清空单元格。
+- **60 秒自动保存**：只对“已保存过路径、当前有未保存改动、不是编辑中、没有活动筛选、没有正在读写”的文档生效；成功后清 dirty、刷新最近文件、状态栏显示“已自动保存 HH:MM”。新文档和无路径文档不会偷偷落盘。
+- **自定义序列排序**：排序条件第三项方向为“自定义序列”，可输入 `待发货,已完成,进行中`（逗号 / 中文逗号 / 顿号 / 换行均可）。列表内按给定顺序排名，未列出的值排在后面，再按 `localeCompare(..., "zh-CN", {numeric:true})` 兜底。
+- **工作表标签颜色**：工作表弹层每行右侧新增颜色按钮，提供翠绿 / 蓝 / 橙 / 黄 / 紫 / 红 / 灰 7 色与“无”；颜色写入 sheet 的 `tabColor`，随 xlsx 保存，重开保留；标签圆点同步显示。
+- **CSV 导入预览**：选择 CSV 后不再立即覆盖当前表，先弹预览：编码 `UTF-8 / GB18030`、分隔符 `逗号 / Tab / 分号`、首行为标题开关、前 6 行 × 7 列预览、行列统计。点“导入并新建表格”才真正新建并切换；取消不丢当前文档。
+- **CSV 解码细节**：BOM 与 UTF-8 优先，无法判定时按 GB18030；显式 UTF-8 采用非 fatal 解码，预览乱码时可直接切编码看效果。引号内逗号、双引号转义、单元格内换行仍按 RFC 4180 解析。
+
+### 17.2 验收结果（release 0.6.0）
+
+- 查找：`已完成` 命中 7 处；下步进到第 2 / 7 处；单次替换后 6 处；全部替换后 0 处，提示“已替换 6 处”。
+- 自定义排序：`待发货 → 已完成 → 进行中`，首行“待发货”，序列内非降；18 行公式仍随行。
+- 标签颜色：订单 sheet 设为 `#2f80ed`，`sheetTabs()` 回读一致。
+- CSV：M3 订单 4 行 7 列，UTF-8 + 逗号 + 首行标题，标题开关可切；导入后 A1=`订单号`、D2=`128000`、新文档 dirty。
+- 自动保存：H1 写入“自动保存”，dirty 由 true 转 false，文件落盘 9,749 B，重读 H1 正确。
+- 900×620：查找面板 344×195，right 882 / bottom 349；CSV 弹窗 760×423，right 830 / bottom 521.5，均不越界。
+- M0 / M1 / M1 layout / M2 / M3 / M4 / multi：全部 `OK`；M3 排序选项数由 9 改 10，`M3 … OK` 八行通过；M4 十三行全过。
+- MCP：`version 0.6.0`，4 工具，`MCP M1 OK`；Rust 6 passed。
+- 构建：1913 modules，主 JS 9,894.50 kB、CSS 170.03 kB；release profile 1m 10s，NSIS 4.13 MiB。
+
+正式截图在 `review-0.6.0/`：`600-find.png`、`601-find-replaced.png`、`602-sort-custom.png`、`603-sheet-colors.png`、`604-csv-preview.png`、`605-csv-imported.png`、`606-autosave.png`、`607-find-900.png`、`608-csv-900.png`。日志：`m8-release.txt`、`m0-release.txt`、`m1-release.txt`、`m2-release.txt`、`m3-release.txt`、`m4-release.txt`、`multi-release.txt`、`mcp-release.txt`、`rust-test-release.txt`、`build-web.txt`、`build-release.txt`。
+
+### 17.3 已知边界
+
+- 查找范围是当前 sheet 的已用区域，上限约 200 万格；不跨 sheet、不支持正则 / 通配符 / 全字匹配，公式按公式文本匹配。
+- 替换只处理普通值；公式单元格一律跳过，避免公式被改写。
+- 自动保存 60 秒一次，只在已有路径且非编辑 / 非筛选 / 非 busy 时执行；新文档、CSV 未保存文档仍需手动保存。
+- 自定义序列只作用于当前排序键；最多仍 3 键；未列值统一排后，不做“其他值优先”。
+- 标签颜色只有 7 个预设 + 无，不做任意取色器；随 xlsx `tabColor` 保存。
+- CSV 预览最多显示 6 行 × 7 列，完整数据仍全量导入；分隔符只开放逗号 / Tab / 分号，不做自定义单字符。
+- 排序仍是即时重排，不写进 xlsx；筛选仍是视图态，保存前会清筛选。
+
+### 17.4 产物（v0.6.0）
+
+| 文件 | 大小 | SHA-256 |
+|---|---:|---|
+| `Soroban.exe` | 6,949,888 B（6.63 MB） | `EFF36DAFFB3066E74698CA368B473ECC92CF453CCC2D6644121334B575EF7659` |
+| `Soroban_0.6.0_x64-setup.exe` | 4,331,309 B（4.13 MB） | `9577EE7A96524C3D58658D3E00A54C3DBA711423B3C3B916A1EE50DB1BA3C8B2` |
+
+产物已复制到 `Soroban/` 与套件根目录，均未签名；0.5.1 安装包已移除，`release-0.5.1.sha256` 保留作历史，`release-0.6.0.sha256` 已写入。
+
+*小方工作室 · Soroban · 0.6.0 编辑效率 / CSV 预览 ｜ Papyra 办公套件 ｜ 2026-11-25*
+
+## 十八 0.6.1 渲染收敛与 Bugfix（2026-11-25）
+
+0.6.1 是 0.6.0 之后的渲染专项批次：不改一期功能范围，专门修“格子很多时把整片区域都画了”的问题，并补齐打印预览与图表浮层的屏外绘制预算。
+
+### 18.1 本期修复
+
+- **网格只画视口**：Univer 的 Grid 画布本身按视口尺寸建图，本轮把外层 `.sheet-grid` 加上 `overflow:hidden` + `contain:layout paint`，并确认十万行表的画布始终是视口大小，不会按 100001 行 × 20 列的整表高度建图。
+- **异常大选区收敛**：旧文件或桥接导入可能把整张已用区域当作活动选区交给 Univer 首屏绘制。打开工作簿时只收敛“异常大选区”（超过 5,000 格、500 行或 200 列），普通文件与小选区保持原样；这样十万行表归一 A1，又不会把合并单元格 A1 误改到下一行。
+- **CSV 导入不选整块**：导入结束后活动选区只落在 A1，不再把整个导入矩阵作为选区；大 CSV 导入后不会出现“整片数据被选中/描边”。
+- **打印预览按屏跳过**：`.print-page` 使用 `content-visibility:auto` + `contain-intrinsic-size`，屏幕预览只对视口附近的纸页做布局与绘制；进入 `@media print` 后强制 `content-visibility:visible`、`zoom:1`，保证 6 页 / 10 页都能完整出纸。
+- **图表浮层按屏跳过**：`.chart-card` 同样启用 `content-visibility:auto` + 布局 / 绘制 containment，视口外卡片不参与首屏布局与绘制；视口内卡片正常显示、拖动、联动。
+- **测试夹具隔离**：M4 打印 E2E 改为把 `assets/M4-打印.xlsx` 复制到 `review-m4` 后再打开，自动保存不再回写原始样本；本轮已恢复被测试污染过的 M4 样本。
+- **E2E 稳定性**：全部 E2E 的 `page.reload` 由 `networkidle2` 改为 `domcontentloaded`，避免 WebView2 长连接导致导航超时误报。
+
+### 18.2 验收结果（release 0.6.1）
+
+- 十万行：100,002 行 × 20 列，Grid 画布 `1280×620 CSS`（位图 1920×930），DOM 节点 194，选区 `A1`、名称框 `A1`；整表理论高度超过 100 万 px，画布未随整表展开。
+- 滚动：24 次滚轮翻页，`147 FPS`，平均帧 `6.8 ms`，慢帧 0；滚动后画布容器高度仍等于视口。
+- 打印预览：100% 实际大小 6 页，屏幕态 6 页全部 `content-visibility=auto`，带 `contain-intrinsic-size` 占位；打印态 6 页全部恢复 `visible`、`zoom=1`，不出现只打第一页；PDF 输出 6 页，第 1 / 6 页均有完整表头与数据。
+- 图表：新建柱状图后 1 张 `.chart-card`，`content-visibility=auto`，视口内可见，图表数据与联动正常。
+- CSV：M8 导入后选区 `A1`，A1=`订单号`、D2=`128000`，不再选中 4×7 数据块。
+- M0：欢迎页 / 新建 / 打开样本 / 合并单元格 A1 公式栏 / 保存重开全过，`M0 UI OK`；M0 样本 A1 仍显示“2026 年第四季度销售台账”，未被选区收敛改到 A2。
+- M1 / M1 layout / M2 / M3 / M4 / multi / M8：全部 `OK`；M4 十三行全过，M8 六组全过。
+- MCP：`version 0.6.1`，4 工具；Rust 6 passed。
+- 构建：1913 modules，主 JS `9,894.70 kB`、CSS `170.31 kB`；release profile 1m 19s，NSIS 4.13 MiB。
+
+正式截图在 `review-0.6.1/`：`610-render-large.png`、`611-render-scrolled.png`、`612-render-print.png`、`613-render-charts.png`。日志：`render-e2e.txt`、`render-release-final-console.txt`、`m0-release.txt`、`m1-release.txt`、`m2-release.txt`、`m3-release.txt`、`m4-release.txt`、`m8-release.txt`、`multi-release.txt`、`mcp-release.txt`、`rust-test-release.txt`、`build-web-final.txt`、`build-release-final.txt`。
+
+### 18.3 已知边界
+
+- Univer Grid 仍是自绘 canvas，天然按视口画；本轮验收用画布像素尺寸、DOM 节点数、滚动帧率证明“没有按整表建 DOM / 建画布”，不是用“元素可见性”逐格判断。
+- 打印预览的屏外跳过是浏览器级 `content-visibility`：所有页的 DOM 仍存在，但屏外页不参与布局与绘制；打印时全部恢复。页数上限仍为 80 页。
+- 图表卡片屏外不布局不绘制，但节点仍在；图表坐标在拖动时已限制在网格范围内，不会因隐藏而丢失数据。
+- 选区收敛只处理异常大选区；用户在表内主动全选仍会保留选区，由 Univer 按视口裁剪。
+- 十万行首次打开仍需约 10–12 秒做 xlsx 解析与写入，这是导入耗时，不是渲染耗时；本批次未改 SheetJS 导入路径。
+- 打印仍只支持 A4 纵 / 横、固定 12 mm 页边距、10 万格 / 80 页上限；不重算公式、不打印图表。
+
+### 18.4 产物（v0.6.1）
+
+| 文件 | 大小 | SHA-256 |
+|---|---:|---|
+| `Soroban.exe` | 6,949,888 B（6.63 MB） | `520751DFB015F9C6654EE9CD2C60FD4B3D036DAA5DF715FC50F97D7BC7B71DC4` |
+| `Soroban_0.6.1_x64-setup.exe` | 4,331,527 B（4.13 MB） | `5CADC5ED6D744FCBBA53621AE5728BA137FECACDA30B667C353AE3AC38CAE463` |
+
+产物已复制到 `Soroban/` 与套件根目录，均未签名；`release-0.6.1.sha256` 已写入，0.6.0 安装包与 `release-0.6.0.sha256` 保留作历史。
+
+*小方工作室 · Soroban · 0.6.1 渲染收敛 ｜ Papyra 办公套件 ｜ 2026-11-25*

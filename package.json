@@ -1,7 +1,7 @@
 {
   "name": "soroban",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.7.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,7 +11,8 @@
     "icons": "node scripts/make-icons.mjs",
     "test:m2": "node scripts/e2e-m2.mjs",
     "test:m3": "node scripts/e2e-m3.mjs",
-    "test:m4": "node scripts/e2e-m4.mjs"
+    "test:m4": "node scripts/e2e-m4.mjs",
+    "test:multi": "node scripts/e2e-multi.mjs"
   },
   "dependencies": {
     "@mertdeveci55/univer-import-export": "0.2.1",

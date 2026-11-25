@@ -18,3 +18,7 @@ tmp-search.json
 *.log
 e2e-out.txt
 tmp-*.json
+
+# ---- WebView2 用户数据目录（验收截图时的浏览器缓存，不入库）----
+EBWebView/
+review-*/webview-*/

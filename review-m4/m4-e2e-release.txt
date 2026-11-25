@@ -10,5 +10,6 @@ M4 900 OK · 窗口 880×600 · 纸张 349px · 按钮可见
 M4 PRINT CALL OK · window.print 调用 1 次
 M4 PDF OK · 2 页 · 406064 B
 M4 FILTER PRINT OK · 筛选 20/81 · 只打印可见 20 行
+M4 SHORTCUT OK · Ctrl+P 打开打印
 
 ALL M4 UI CHECKS PASSED

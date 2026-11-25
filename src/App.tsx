@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { SheetEditor, type EditorHandle } from "./components/SheetEditor";
+import type { SortKey } from "./components/DataToolbar";
+import { CsvImportDialog } from "./components/CsvImportDialog";
 import { Splash } from "./components/Splash";
 import { TopBar } from "./components/TopBar";
 import { Welcome } from "./components/Welcome";
@@ -13,8 +15,8 @@ import {
   type RecentFile,
 } from "./lib/recents";
 import { fileExists, fileSize, readFileBytes, writeFileBytes } from "./lib/tauri";
-import { csvRowsToCellValues, decodeCsvBytes } from "./lib/data";
-import type { CsvCell } from "./lib/data";
+import { csvRowsToCellValues, decodeCsvBytes, guessCsvEncoding } from "./lib/data";
+import type { CsvCell, CsvDelimiter, CsvEncoding } from "./lib/data";
 
 type Screen = "splash" | "welcome" | "editor";
 
@@ -29,6 +31,12 @@ type DocRef = {
 };
 
 type Toast = { text: string; kind: "ok" | "error"; id: number };
+type CsvPending = {
+  name: string;
+  size: number;
+  bytes: Uint8Array;
+  guessedEncoding: CsvEncoding;
+};
 
 const XLSX_FILTER = [{ name: "Excel 工作簿", extensions: ["xlsx"] }];
 const CSV_FILTER = [{ name: "CSV 文件", extensions: ["csv"] }];
@@ -45,6 +53,7 @@ export default function App() {
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [csvPending, setCsvPending] = useState<CsvPending | null>(null);
   const editorRef = useRef<EditorHandle>(null);
   const toastTimer = useRef<number>();
   const dirtyRef = useRef(false);
@@ -209,6 +218,32 @@ export default function App() {
     [confirmDiscard, notify],
   );
 
+  const previewCsvPath = useCallback(
+    async (path: string) => {
+      if (busyRef.current) return false;
+      setBusy(true);
+      setStatusText("正在读取 CSV…");
+      setStatusKind("busy");
+      try {
+        const size = await fileSize(path);
+        if (size === 0) throw new Error("CSV 为空或无法读取");
+        if (size > 80 * 1024 * 1024) throw new Error("CSV 超过 80MB，暂不导入");
+        const bytes = await readFileBytes(path);
+        const guessed = guessCsvEncoding(bytes);
+        setCsvPending({ name: baseName(path), size, bytes, guessedEncoding: guessed });
+        setStatusText("请确认 CSV 编码与分隔符");
+        setStatusKind("ok");
+        return true;
+      } catch (err) {
+        notify(`CSV 读取失败：${err instanceof Error ? err.message : String(err)}`, "error");
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [notify],
+  );
+
   const pickAndImportCsv = useCallback(async () => {
     if (busyRef.current) return;
     try {
@@ -217,11 +252,40 @@ export default function App() {
         directory: false,
         filters: CSV_FILTER,
       });
-      if (typeof picked === "string") await importCsvPath(picked);
+      if (typeof picked === "string") await previewCsvPath(picked);
     } catch (err) {
       notify(`无法打开文件选择器：${err instanceof Error ? err.message : String(err)}`, "error");
     }
-  }, [importCsvPath, notify]);
+  }, [notify, previewCsvPath]);
+
+  const confirmCsvImport = useCallback(
+    (payload: { rows: string[][]; encoding: CsvEncoding; delimiter: CsvDelimiter; header: boolean }) => {
+      const pending = csvPending;
+      if (!pending || !confirmDiscard()) return;
+      const values = csvRowsToCellValues(payload.rows);
+      const base = pending.name.replace(/\.csv$/i, "") || "CSV 导入";
+      setDoc({
+        key: `csv-${Date.now()}`,
+        path: null,
+        name: `${base}.xlsx`,
+        bytes: null,
+        size: pending.size,
+        csvRows: values,
+        csvSheetName: base,
+      });
+      setCsvPending(null);
+      setDirty(true);
+      setCanUndo(false);
+      setCanRedo(false);
+      setSheets(1);
+      setStatusText("已导入 CSV");
+      setStatusKind("ok");
+      setScreen("editor");
+      const delimiterLabel = payload.delimiter === "\t" ? "Tab" : payload.delimiter === ";" ? "分号" : "逗号";
+      notify(`已导入 ${pending.name} · ${payload.encoding} · ${delimiterLabel} · ${payload.rows.length} 行`);
+    },
+    [confirmDiscard, csvPending, notify],
+  );
 
   const pickAndOpen = useCallback(async () => {
     if (busyRef.current) return;
@@ -285,6 +349,42 @@ export default function App() {
       notify(`无法打开保存对话框：${err instanceof Error ? err.message : String(err)}`, "error");
     }
   }, [notify, saveTo]);
+
+  const autoSaveNow = useCallback(async () => {
+    const current = docRef.current;
+    if (screenRef.current !== "editor" || !current?.path || !dirtyRef.current || busyRef.current || !editorRef.current) {
+      return { saved: false, reason: "empty" };
+    }
+    if (editorRef.current.isEditing()) return { saved: false, reason: "editing" };
+    if (editorRef.current.filterInfo()) return { saved: false, reason: "filtered" };
+    setBusy(true);
+    setStatusText("正在自动保存…");
+    setStatusKind("busy");
+    try {
+      const bytes = await editorRef.current.saveBuffer();
+      const size = await writeFileBytes(current.path, bytes);
+      const sheetCount = editorRef.current.sheetCount() || 1;
+      setDirty(false);
+      setRecent(rememberRecent({ path: current.path, name: current.name, sheets: sheetCount, size }));
+      const stamp = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+      setStatusText(`已自动保存 ${stamp}`);
+      setStatusKind("ok");
+      return { saved: true, size };
+    } catch (err) {
+      setStatusText("自动保存失败");
+      setStatusKind("error");
+      return { saved: false, reason: err instanceof Error ? err.message : String(err) };
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void autoSaveNow();
+    }, 60000);
+    return () => window.clearInterval(timer);
+  }, [autoSaveNow]);
 
   const saveCsvTo = useCallback(
     async (target: string) => {
@@ -352,6 +452,9 @@ export default function App() {
       } else if (mod && e.key.toLowerCase() === "o") {
         e.preventDefault();
         void pickAndOpen();
+      } else if (mod && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        editorRef.current?.openPrint();
       } else if (mod && e.key.toLowerCase() === "z" && !e.shiftKey) {
         e.preventDefault();
         editorRef.current?.undo();
@@ -393,22 +496,37 @@ export default function App() {
       cellStyle: (row: number, column: number) => editorRef.current?.cellStyle(row, column) ?? null,
       sortBy: (direction: "asc" | "desc", column?: number) =>
         editorRef.current?.sortBy(direction, column) ?? { ok: false, message: "尚未就绪" },
+      sortByKeys: (keys: SortKey[]) =>
+        editorRef.current?.sortByKeys(keys) ?? { ok: false, message: "尚未就绪" },
       filterBy: (column: number, operator: "contains" | "gt" | "lt" | "eq" | "ne", value: string) =>
         editorRef.current?.filterBy(column, operator, value) ?? { ok: false, message: "尚未就绪" },
+      filterByConditions: (
+        conditions: { column: number; operator: "contains" | "gt" | "lt" | "eq" | "ne"; value: string }[],
+        mode: "and" | "or" = "and",
+      ) => editorRef.current?.filterByConditions(conditions, mode) ?? { ok: false, message: "尚未就绪" },
       clearFilter: () => editorRef.current?.clearFilter(),
       filterInfo: () => editorRef.current?.filterInfo() ?? null,
       freeze: (kind: "first-row" | "first-col" | "at-cell" | "none") =>
         editorRef.current?.freeze(kind) ?? { ok: false, message: "尚未就绪" },
       freezeState: () => editorRef.current?.freezeState() ?? null,
       sheetNames: () => editorRef.current?.sheetNames() ?? [],
+      sheetTabs: () => editorRef.current?.sheetTabs() ?? [],
       activeSheetName: () => editorRef.current?.activeSheetName() ?? "",
       renameSheet: (name: string) => editorRef.current?.renameSheet(name) ?? false,
+      setSheetColor: (sheetId: string, color: string) => editorRef.current?.setSheetColor(sheetId, color) ?? false,
       duplicateSheet: () => editorRef.current?.duplicateSheet() ?? null,
       deleteSheet: () => editorRef.current?.deleteSheet() ?? false,
       csvText: () => editorRef.current?.csvText() ?? "",
       hiddenRows: () => editorRef.current?.hiddenRows() ?? 0,
       importCsv: (path: string) => importCsvPath(path, { skipConfirm: true }),
+      previewCsv: (path: string) => previewCsvPath(path),
       exportCsv: (path: string) => saveCsvTo(path),
+      autoSaveNow: () => autoSaveNow(),
+      openFind: (replace = false) => editorRef.current?.openFind(replace),
+      findState: () => editorRef.current?.findState() ?? null,
+      replaceAll: () => {
+        editorRef.current?.openFind(true);
+      },
       openPrint: () => editorRef.current?.openPrint(),
       printInfo: () => editorRef.current?.printInfo() ?? null,
     };
@@ -505,6 +623,20 @@ export default function App() {
           />
         </div>
       )}
+      {csvPending ? (
+        <CsvImportDialog
+          name={csvPending.name}
+          size={csvPending.size}
+          bytes={csvPending.bytes}
+          guessedEncoding={csvPending.guessedEncoding}
+          onCancel={() => {
+            setCsvPending(null);
+            setStatusText(screen === "editor" ? "已取消导入" : "本地计算已就绪");
+            setStatusKind("ok");
+          }}
+          onConfirm={confirmCsvImport}
+        />
+      ) : null}
       {toast && <div className={`toast ${toast.kind}`}>{toast.text}</div>}
     </div>
   );

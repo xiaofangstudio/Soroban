@@ -72,6 +72,15 @@ export function IconBack(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function IconSearch(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="M15.5 15.5 21 21" />
+    </svg>
+  );
+}
+
 export function IconArrow(props: SVGProps<SVGSVGElement>) {
   return (
     <svg {...base({ width: 13, height: 13, ...props })}>

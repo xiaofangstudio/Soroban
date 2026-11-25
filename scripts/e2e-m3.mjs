@@ -5,17 +5,21 @@ import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer-core";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const fixture = path.join(root, "assets", "M3-整理.xlsx");
+const fixtureSource = path.join(root, "assets", "M3-整理.xlsx");
 const csvUtf8 = path.join(root, "assets", "M3-订单.csv");
 const csvGbk = path.join(root, "assets", "M3-订单-GBK.csv");
-const out = path.join(root, "review-m3");
+const out = process.env.SOROBAN_REVIEW_DIR
+  ? path.resolve(root, process.env.SOROBAN_REVIEW_DIR)
+  : path.join(root, "review-m3");
 const saveCopy = path.join(out, "M3-筛选保存.xlsx");
 const exportCsv = path.join(out, "M3-导出.csv");
 const reimportCopy = path.join(out, "M3-导出回读.xlsx");
+const fixture = path.join(out, "M3-整理-working.xlsx");
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const cdp = process.env.SOROBAN_CDP || "9446";
 
 fs.mkdirSync(out, { recursive: true });
+fs.copyFileSync(fixtureSource, fixture);
 fs.rmSync(saveCopy, { force: true });
 fs.rmSync(exportCsv, { force: true });
 fs.rmSync(reimportCopy, { force: true });
@@ -33,7 +37,7 @@ page.on("pageerror", (e) => errors.push(e.stack || String(e)));
 
 async function open(file, { width = 1280, height = 800, clear = true, tab = "订单" } = {}) {
   await page.setViewport({ width, height, deviceScaleFactor: 1.5 });
-  await page.reload({ waitUntil: "networkidle2" });
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 90000 });
   await page.waitForSelector(".welcome", { timeout: 30000 });
   if (clear) {
     await page.evaluate(() => {
@@ -135,10 +139,15 @@ const sortPanel = await page.evaluate(() => {
   };
 });
 assert.equal(sortPanel.range, "排序 · A1:G19");
-assert.equal(sortPanel.options, 7);
+assert.equal(sortPanel.options, 10);
 assert.ok(sortPanel.rect.right <= 1280 && sortPanel.rect.bottom <= 800);
 await page.screenshot({ path: path.join(out, "300-sort-panel.png") });
-await clickPop("降序 ↓");
+await page.evaluate(() => {
+  const selects = document.querySelectorAll(".sort-pop select");
+  selects[1].value = "desc";
+  selects[1].dispatchEvent(new Event("change", { bubbles: true }));
+});
+await clickPop("应用排序");
 await sleep(900);
 const sorted = await page.evaluate(() => {
   const snap = window.__soroban.getSnapshot();

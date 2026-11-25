@@ -63,7 +63,7 @@ export function TopBar({
         </button>
       </div>
       <div className="tb-group">
-        <button className="tb-btn wide" onClick={onPrint} disabled={busy} title="打印与分页预览">
+        <button className="tb-btn wide" onClick={onPrint} disabled={busy} title="打印与分页预览（Ctrl+P）">
           <IconPrint width={14} height={14} />
           打印
         </button>

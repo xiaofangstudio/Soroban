@@ -18,7 +18,7 @@ const page = pages.find((p) => p.url().includes("1421") || p.url().includes("tau
 if (!page) throw new Error("找不到 Soroban 窗口页面");
 
 await page.setViewport({ width: 900, height: 620, deviceScaleFactor: 1 });
-await page.reload({ waitUntil: "networkidle2" });
+await page.reload({ waitUntil: "domcontentloaded", timeout: 90000 });
 await page.waitForSelector(".welcome", { timeout: 20000 });
 await page.evaluate(() => window.__soroban.newDoc());
 await page.waitForSelector(".univer-container", { timeout: 30000 });
@@ -26,6 +26,7 @@ await page.waitForFunction(() => !document.querySelector(".sheet-loading"), { ti
 await sleep(1000);
 
 await page.click(".fx-input");
+await sleep(120);
 await page.keyboard.type("=SU");
 await sleep(400);
 const suggest = await page.evaluate(() => {

@@ -11,7 +11,7 @@ const page = pages.find((p) => p.url().includes("1421") || p.url().includes("tau
 if (!page) throw new Error("找不到 Soroban 窗口页面");
 
 await page.setViewport({ width: 900, height: 620, deviceScaleFactor: 1 });
-await page.reload({ waitUntil: "networkidle2" });
+await page.reload({ waitUntil: "domcontentloaded", timeout: 90000 });
 await page.waitForSelector(".welcome", { timeout: 20000 });
 await new Promise((r) => setTimeout(r, 500));
 await page.screenshot({ path: path.join(root, "review-m0", "010-welcome-900.png") });

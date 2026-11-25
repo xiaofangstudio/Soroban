@@ -34,7 +34,7 @@ const first = async (row, col) => {
   return sh.cellData?.[row]?.[col];
 };
 
-await page.reload({ waitUntil: "networkidle2" });
+await page.reload({ waitUntil: "domcontentloaded", timeout: 90000 });
 await page.waitForSelector(".welcome", { timeout: 20000 });
 await sleep(400);
 await page.screenshot({ path: shot("001-welcome.png") });

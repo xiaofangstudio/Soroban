@@ -1,0 +1,53 @@
+{
+  "openMs": 11761,
+  "canvases": [
+    {
+      "width": 0,
+      "height": 0,
+      "cssWidth": 0,
+      "cssHeight": 0,
+      "scrollWidth": 0,
+      "scrollHeight": 0,
+      "parentClass": "univer-relative univer-size-full"
+    },
+    {
+      "width": 1920,
+      "height": 930,
+      "cssWidth": 1280,
+      "cssHeight": 620,
+      "scrollWidth": 1280,
+      "scrollHeight": 620,
+      "parentClass": "univer-relative univer-overflow-hidden dark:!univer-bg-gray-900"
+    }
+  ],
+  "nodes": 197,
+  "container": {
+    "width": 1280,
+    "height": 621
+  },
+  "layer": null,
+  "cells": {
+    "rows": 100002,
+    "columns": 20
+  },
+  "selection": "A1",
+  "status": "A1:H100001 · A 序号",
+  "nameBox": "A1"
+}
+AFTER {
+  "canvases": [
+    {
+      "width": 0,
+      "height": 0,
+      "top": -855,
+      "left": -1000
+    },
+    {
+      "width": 1920,
+      "height": 930,
+      "top": 145,
+      "left": 0
+    }
+  ],
+  "layer": null
+}

@@ -30,13 +30,14 @@ const waitReady = async () => {
   await sleep(1200);
 };
 
-await page.reload({ waitUntil: "networkidle2" });
+await page.reload({ waitUntil: "domcontentloaded", timeout: 90000 });
 await page.waitForSelector(".welcome", { timeout: 20000 });
 await page.evaluate(() => window.__soroban.newDoc());
 await waitReady();
 
 // 公式提示卡：输入 =SU，点击 SUM 填入并算 1+2+3
 await page.click(".fx-input");
+await sleep(120);
 await page.keyboard.type("=SU");
 await sleep(400);
 const suggest = await page.evaluate(() => ({

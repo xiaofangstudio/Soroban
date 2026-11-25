@@ -1,0 +1,22 @@
+
+> soroban@0.6.0 tauri
+> tauri dev
+
+     Running BeforeDevCommand (`npm run dev`)
+
+> soroban@0.6.0 dev
+> vite
+
+Re-optimizing dependencies because lockfile has changed
+
+  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m1978[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m1421[22m/[39m
+     Running DevCommand (`cargo  run --no-default-features --color always --`)
+        Info Watching D:\20533\deskbox\fangwork\Papyra\Soroban\src-tauri for changes...
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.50s
+     Running `target\debug\soroban.exe`
+[2m22:04:33[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/theme.css[22m
+[2m22:04:40[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/theme.css[22m
+[2m22:04:45[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/theme.css[22m
+[2m22:04:49[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/theme.css[22m

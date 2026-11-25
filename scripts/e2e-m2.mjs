@@ -26,7 +26,7 @@ page.on("pageerror", (e) => errors.push(e.stack || String(e)));
 
 async function open(file, { width = 1280, height = 800, clear = true, tab = "月度" } = {}) {
   await page.setViewport({ width, height, deviceScaleFactor: 1.5 });
-  await page.reload({ waitUntil: "networkidle2" });
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 90000 });
   await page.waitForSelector(".welcome", { timeout: 30000 });
   if (clear) {
     await page.evaluate(() => {

@@ -12,15 +12,29 @@ export type DataContext = {
 
 export type FilterOperator = "contains" | "gt" | "lt" | "eq" | "ne";
 
+export type SortKey = { column: number; direction: "asc" | "desc" | "custom"; order?: string[] };
+
+export type FilterCondition = {
+  column: number;
+  operator: FilterOperator;
+  value: string;
+};
+
+export type FilterMode = "and" | "or";
+
 export type FilterInfo = {
   columnLabel: string;
   operator: string;
   value: string;
   matched: number;
   total: number;
+  conditions?: { columnLabel: string; operator: string; value: string }[];
+  mode?: FilterMode;
 };
 
-export type SheetTab = { id: string; name: string };
+export type SheetTab = { id: string; name: string; color?: string };
+
+const SHEET_COLORS = ["#0e9f6e", "#2f80ed", "#e8590c", "#f2c94c", "#8e44ad", "#d64545", "#7d9488"];
 
 type Props = {
   context: DataContext;
@@ -28,13 +42,14 @@ type Props = {
   freeze: { rows: number; columns: number } | null;
   sheets: SheetTab[];
   activeSheetId: string;
-  onSort: (column: number, direction: "asc" | "desc") => void;
-  onFilter: (column: number, operator: FilterOperator, value: string) => void;
+  onSort: (keys: SortKey[]) => void;
+  onFilter: (conditions: FilterCondition[], mode: FilterMode) => void;
   onClearFilter: () => void;
   onFreeze: (kind: "first-row" | "first-col" | "at-cell" | "none") => void;
   onImportCsv: () => void;
   onExportCsv: () => void;
   onActivateSheet: (id: string) => void;
+  onSetSheetColor: (id: string, color: string) => void;
   onRenameSheet: (name: string) => void;
   onDuplicateSheet: () => void;
   onDeleteSheet: () => void;
@@ -100,6 +115,7 @@ export function DataToolbar({
   onImportCsv,
   onExportCsv,
   onActivateSheet,
+  onSetSheetColor,
   onRenameSheet,
   onDuplicateSheet,
   onDeleteSheet,
@@ -107,11 +123,13 @@ export function DataToolbar({
 }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<"sort" | "filter" | "freeze" | "sheets" | null>(null);
-  const [sortColumn, setSortColumn] = useState(context.currentColumn);
-  const [filterColumn, setFilterColumn] = useState(context.currentColumn);
-  const [operator, setOperator] = useState<FilterOperator>("contains");
-  const [value, setValue] = useState("");
+  const [sortKeys, setSortKeys] = useState<SortKey[]>([{ column: context.currentColumn, direction: "asc" }]);
+  const [filterConditions, setFilterConditions] = useState<FilterCondition[]>([
+    { column: context.currentColumn, operator: "contains", value: "" },
+  ]);
+  const [filterMode, setFilterMode] = useState<FilterMode>("and");
   const [sheetDraft, setSheetDraft] = useState("");
+  const [colorFor, setColorFor] = useState<string | null>(null);
   const activeSheet = sheets.find((sheet) => sheet.id === activeSheetId);
 
   useEffect(() => {
@@ -133,19 +151,21 @@ export function DataToolbar({
   }, [menu]);
 
   useEffect(() => {
-    if (menu === "sort") setSortColumn(context.currentColumn);
+    if (menu === "sort") setSortKeys([{ column: context.currentColumn, direction: "asc" }]);
     if (menu === "filter") {
-      setFilterColumn(context.currentColumn);
-      setOperator("contains");
-      setValue("");
+      setFilterConditions([{ column: context.currentColumn, operator: "contains", value: "" }]);
+      setFilterMode(filter?.mode === "or" ? "or" : "and");
     }
-  }, [menu, context.currentColumn]);
+  }, [menu, context.currentColumn, filter?.mode]);
 
   useEffect(() => {
     setSheetDraft(activeSheet?.name ?? "");
   }, [activeSheet?.id, activeSheet?.name]);
 
-  const filterButton = filter ? `筛选 ${filter.matched}/${filter.total}` : "筛选";
+  const filterCount = filter?.conditions?.length ?? 0;
+  const filterButton = filter
+    ? `筛选 ${filter.matched}/${filter.total}${filterCount > 1 ? ` · ${filterCount}条件` : ""}`
+    : "筛选";
   const freezeLabel = freeze && (freeze.rows > 0 || freeze.columns > 0)
     ? `冻结 ${freeze.rows}行${freeze.columns ? ` ${freeze.columns}列` : ""}`
     : "冻结";
@@ -165,37 +185,106 @@ export function DataToolbar({
         {menu === "sort" ? (
           <div className="data-pop sort-pop">
             <div className="data-pop-head">排序 · {context.rangeA1}</div>
-            <label className="data-field">
-              <span>排序列</span>
-              <select value={String(sortColumn)} onChange={(event) => setSortColumn(Number(event.target.value))}>
-                {context.columns.map((column) => (
-                  <option key={column.index} value={column.index}>
-                    {column.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="sort-key-list">
+              {sortKeys.map((key, index) => (
+                <div className="sort-key-item" key={index}>
+                  <div className="sort-key-row">
+                    <select
+                      className="sort-column"
+                      value={String(key.column)}
+                      title={`排序条件 ${index + 1}`}
+                      onChange={(event) => {
+                        const column = Number(event.target.value);
+                        setSortKeys((current) =>
+                          current.map((item, itemIndex) => (itemIndex === index ? { ...item, column } : item)),
+                        );
+                      }}
+                    >
+                      {context.columns.map((column) => (
+                        <option key={column.index} value={column.index}>
+                          {column.label}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="sort-direction"
+                      value={key.direction}
+                      onChange={(event) => {
+                        const direction = event.target.value as SortKey["direction"];
+                        setSortKeys((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? { ...item, direction, order: direction === "custom" ? item.order ?? [] : undefined }
+                              : item,
+                          ),
+                        );
+                      }}
+                    >
+                      <option value="asc">升序 ↑</option>
+                      <option value="desc">降序 ↓</option>
+                      <option value="custom">自定义序列</option>
+                    </select>
+                    {index > 0 ? (
+                      <button
+                        className="cond-del"
+                        title="移除该排序条件"
+                        onClick={() => setSortKeys((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                      >
+                        ×
+                      </button>
+                    ) : (
+                      <span className="cond-spacer" />
+                    )}
+                  </div>
+                  {key.direction === "custom" ? (
+                    <input
+                      className="sort-custom"
+                      value={(key.order ?? []).join(", ")}
+                      onChange={(event) => {
+                        const order = event.target.value
+                          .split(/[,，、\n]/)
+                          .map((item) => item.trim())
+                          .filter(Boolean);
+                        setSortKeys((current) =>
+                          current.map((item, itemIndex) => (itemIndex === index ? { ...item, order } : item)),
+                        );
+                      }}
+                      placeholder="自定义顺序，用逗号分隔"
+                      title="按列表顺序排，未列出的值排在后面"
+                    />
+                  ) : null}
+                </div>
+              ))}
+            </div>
+            <button
+              className="data-add-row"
+              disabled={sortKeys.length >= Math.min(3, context.columns.length)}
+              onClick={() => {
+                const nextColumn =
+                  context.columns.find((column) => !sortKeys.some((key) => key.column === column.index))?.index ??
+                  context.currentColumn;
+                setSortKeys((current) => [...current, { column: nextColumn, direction: "asc" }]);
+              }}
+            >
+              ＋ 添加排序条件
+            </button>
             <div className="data-pop-actions">
               <button
                 className="data-primary"
                 onClick={() => {
-                  onSort(sortColumn, "asc");
+                  onSort(sortKeys);
                   setMenu(null);
                 }}
               >
-                升序 ↑
+                应用排序
               </button>
               <button
-                className="data-primary"
-                onClick={() => {
-                  onSort(sortColumn, "desc");
-                  setMenu(null);
-                }}
+                onClick={() => setSortKeys([{ column: context.currentColumn, direction: "asc" }])}
               >
-                降序 ↓
+                重置
               </button>
             </div>
-            <div className="data-pop-tip">首行自动识别为表头；含公式的列会按新行位置重写相对引用。</div>
+            <div className="data-pop-tip">先按第 1 条排序；相同值再看下一条。公式随行平移。</div>
           </div>
         ) : null}
       </div>
@@ -216,52 +305,117 @@ export function DataToolbar({
               筛选 · {context.rangeA1}
               {filter ? <span className="data-pop-badge">已命中 {filter.matched}/{filter.total}</span> : null}
             </div>
-            <label className="data-field">
-              <span>列</span>
-              <select
-                value={String(filterColumn)}
-                onChange={(event) => setFilterColumn(Number(event.target.value))}
+            <div className="filter-mode" role="group" aria-label="条件组合方式">
+              <span>满足</span>
+              <button
+                className={filterMode === "and" ? "active" : ""}
+                onClick={() => setFilterMode("and")}
+                title="所有条件同时成立"
               >
-                {context.columns.map((column) => (
-                  <option key={column.index} value={column.index}>
-                    {column.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="data-row">
-              <label className="data-field small">
-                <span>条件</span>
-                <select value={operator} onChange={(event) => setOperator(event.target.value as FilterOperator)}>
-                  {OPERATORS.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="data-field grow">
-                <span>值</span>
-                <input
-                  value={value}
-                  onChange={(event) => setValue(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      onFilter(filterColumn, operator, value);
-                      setMenu(null);
-                    }
-                  }}
-                  placeholder="输入筛选值"
-                  autoFocus
-                />
-              </label>
+                全部条件
+              </button>
+              <button
+                className={filterMode === "or" ? "active" : ""}
+                onClick={() => setFilterMode("or")}
+                title="任一条件成立即可"
+              >
+                任一条件
+              </button>
             </div>
+            <div className="filter-cond-list">
+              {filterConditions.map((condition, index) => (
+                <div className="filter-cond-row" key={index}>
+                  <select
+                    className="filter-column"
+                    value={String(condition.column)}
+                    title={`筛选条件 ${index + 1} 的列`}
+                    onChange={(event) => {
+                      const column = Number(event.target.value);
+                      setFilterConditions((current) =>
+                        current.map((item, itemIndex) => (itemIndex === index ? { ...item, column } : item)),
+                      );
+                    }}
+                  >
+                    {context.columns.map((column) => (
+                      <option key={column.index} value={column.index}>
+                        {column.label}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="filter-operator"
+                    value={condition.operator}
+                    title="条件"
+                    onChange={(event) => {
+                      const operator = event.target.value as FilterOperator;
+                      setFilterConditions((current) =>
+                        current.map((item, itemIndex) => (itemIndex === index ? { ...item, operator } : item)),
+                      );
+                    }}
+                  >
+                    {OPERATORS.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className="filter-value"
+                    value={condition.value}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setFilterConditions((current) =>
+                        current.map((item, itemIndex) => (itemIndex === index ? { ...item, value } : item)),
+                      );
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                        event.preventDefault();
+                        onFilter(filterConditions, filterMode);
+                        setMenu(null);
+                      }
+                    }}
+                    placeholder="值"
+                    title="筛选值，回车直接应用"
+                    autoFocus={index === 0}
+                  />
+                  {index > 0 ? (
+                    <button
+                      className="cond-del"
+                      title="移除该筛选条件"
+                      onClick={() =>
+                        setFilterConditions((current) => current.filter((_, itemIndex) => itemIndex !== index))
+                      }
+                    >
+                      ×
+                    </button>
+                  ) : (
+                    <span className="cond-spacer" />
+                  )}
+                </div>
+              ))}
+            </div>
+            <button
+              className="data-add-row"
+              disabled={filterConditions.length >= Math.min(3, context.columns.length)}
+              onClick={() => {
+                const nextColumn =
+                  context.columns.find(
+                    (column) => !filterConditions.some((condition) => condition.column === column.index),
+                  )?.index ?? context.currentColumn;
+                setFilterConditions((current) => [
+                  ...current,
+                  { column: nextColumn, operator: "contains", value: "" },
+                ]);
+              }}
+            >
+              ＋ 添加筛选条件
+            </button>
             <div className="data-pop-actions">
               <button
                 className="data-primary"
                 onClick={() => {
-                  onFilter(filterColumn, operator, value);
+                  onFilter(filterConditions, filterMode);
                   setMenu(null);
                 }}
               >
@@ -288,7 +442,7 @@ export function DataToolbar({
                 </button>
               ) : null}
             </div>
-            <div className="data-pop-tip">筛选只隐藏不满足的行，不改单元格内容。</div>
+            <div className="data-pop-tip">只隐藏不满足的行，不改内容；值留空的条件不参与筛选。</div>
           </div>
         ) : null}
       </div>
@@ -356,15 +510,49 @@ export function DataToolbar({
             </div>
             <div className="sheet-list">
               {sheets.map((sheet) => (
-                <button
-                  key={sheet.id}
-                  className={`sheet-row${sheet.id === activeSheetId ? " active" : ""}`}
-                  onClick={() => onActivateSheet(sheet.id)}
-                >
-                  <span className="sheet-dot" />
-                  <span className="sheet-row-name">{sheet.name}</span>
-                  {sheet.id === activeSheetId ? <em>当前</em> : null}
-                </button>
+                <div className="sheet-row-wrap" key={sheet.id}>
+                  <button
+                    className={`sheet-row${sheet.id === activeSheetId ? " active" : ""}`}
+                    onClick={() => onActivateSheet(sheet.id)}
+                  >
+                    <span className="sheet-dot" style={sheet.color ? { background: sheet.color } : undefined} />
+                    <span className="sheet-row-name">{sheet.name}</span>
+                    {sheet.id === activeSheetId ? <em>当前</em> : null}
+                  </button>
+                  <button
+                    className="sheet-color-btn"
+                    title="设置标签颜色"
+                    onClick={() => setColorFor(colorFor === sheet.id ? null : sheet.id)}
+                  >
+                    <span className="sheet-color-ring" style={sheet.color ? { borderColor: sheet.color } : undefined} />
+                  </button>
+                  {colorFor === sheet.id ? (
+                    <div className="tab-colors">
+                      {SHEET_COLORS.map((color) => (
+                        <button
+                          key={color}
+                          className={sheet.color === color ? "active" : ""}
+                          style={{ background: color }}
+                          title={color}
+                          onClick={() => {
+                            onSetSheetColor(sheet.id, color);
+                            setColorFor(null);
+                          }}
+                        />
+                      ))}
+                      <button
+                        className="tab-color-none"
+                        title="清除标签颜色"
+                        onClick={() => {
+                          onSetSheetColor(sheet.id, "");
+                          setColorFor(null);
+                        }}
+                      >
+                        无
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               ))}
             </div>
             <label className="data-field sheet-name-field">

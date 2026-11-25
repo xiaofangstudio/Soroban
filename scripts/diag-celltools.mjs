@@ -1,0 +1,26 @@
+import puppeteer from "puppeteer-core";
+import path from "node:path";
+const root = "D:/20533/deskbox/fangwork/Papyra/Soroban";
+const out = path.join(root, "review-0.7");
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const browser = await puppeteer.connect({ browserURL: "http://127.0.0.1:9446", defaultViewport: null });
+const pages = await browser.pages();
+const page = pages.find((p) => p.url().includes("1421") || p.url().includes("tauri")) || pages[0];
+await page.setViewport({ width: 1280, height: 820, deviceScaleFactor: 1.5 });
+await page.reload({ waitUntil: "domcontentloaded", timeout: 90000 });
+await page.waitForSelector(".welcome", { timeout: 30000 });
+await page.evaluate((p) => window.__soroban.openPath(p), path.join(root, "assets", "M0-样本.xlsx"));
+await page.waitForSelector(".univer-container", { timeout: 30000 });
+await page.waitForFunction(() => !document.querySelector(".sheet-loading"), { timeout: 30000 });
+await sleep(1000);
+await page.evaluate(() => window.__soroban.selectRange(0, 0, 0, 5));
+await page.evaluate(() => document.querySelector(".cell-tools-mark")?.click());
+await sleep(400);
+const box = await page.evaluate(() => {
+  const el = document.querySelector(".cell-tools");
+  const r = el?.getBoundingClientRect();
+  return { width: r?.width, height: r?.height, x: r?.x, y: r?.y, right: r?.right, bottom: r?.bottom };
+});
+console.log(box);
+await page.screenshot({ path: path.join(out, "diag-celltools.png") });
+await browser.disconnect();

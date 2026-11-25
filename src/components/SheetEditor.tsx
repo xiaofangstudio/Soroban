@@ -36,8 +36,18 @@ import {
 } from "../lib/charts";
 import type { ChartData, ChartSpec, ChartType } from "../lib/charts";
 import { ChartCard, ChartStudio } from "./ChartLayer";
+import { CellTools } from "./CellTools";
+import type { CellToolAction, CellToolState } from "./CellTools";
 import { DataToolbar } from "./DataToolbar";
-import type { DataContext, FilterInfo, FilterOperator } from "./DataToolbar";
+import type {
+  DataContext,
+  FilterCondition,
+  FilterInfo,
+  FilterMode,
+  FilterOperator,
+  SheetTab,
+  SortKey,
+} from "./DataToolbar";
 import { FormulaHelper } from "./FormulaHelper";
 import { FormatToolbar } from "./FormatToolbar";
 import type { FormatCommand, FormatState } from "./FormatToolbar";
@@ -55,6 +65,9 @@ import type { CsvCell } from "../lib/data";
 
 export type EditorHandle = {
   saveBuffer: () => Promise<Uint8Array>;
+  isEditing: () => boolean;
+  openFind: (replace?: boolean) => void;
+  findState: () => { open: boolean; query: string; matches: number; index: number };
   getSnapshot: () => IWorkbookData | null;
   undo: () => void;
   redo: () => void;
@@ -65,7 +78,9 @@ export type EditorHandle = {
   conditionalRuleCount: () => number;
   cellStyle: (row: number, column: number) => Record<string, unknown> | null;
   sortBy: (direction: "asc" | "desc", column?: number) => { ok: boolean; message: string };
+  sortByKeys: (keys: SortKey[]) => { ok: boolean; message: string };
   filterBy: (column: number, operator: FilterOperator, value: string) => { ok: boolean; message: string };
+  filterByConditions: (conditions: FilterCondition[], mode?: FilterMode) => { ok: boolean; message: string };
   clearFilter: () => void;
   filterInfo: () => FilterInfo | null;
   freeze: (kind: "first-row" | "first-col" | "at-cell" | "none") => { ok: boolean; message: string };
@@ -73,6 +88,8 @@ export type EditorHandle = {
   sheetNames: () => string[];
   activeSheetName: () => string;
   renameSheet: (name: string) => boolean;
+  setSheetColor: (sheetId: string, color: string) => boolean;
+  sheetTabs: () => { id: string; name: string; color?: string }[];
   duplicateSheet: () => string | null;
   deleteSheet: () => boolean;
   csvText: () => string;
@@ -130,6 +147,12 @@ const EMPTY_DATA_CONTEXT: DataContext = {
   rowCount: 1,
 };
 
+const EMPTY_CELL_TOOLS: CellToolState = {
+  merged: false,
+  wrap: false,
+  vertical: "middle",
+};
+
 type FilterScope = {
   sheetId: string;
   startRow: number;
@@ -154,6 +177,24 @@ function toCellText(value: unknown): string {
   const primitive = cellPrimitive(value);
   if (primitive === null || primitive === undefined) return "";
   return typeof primitive === "string" ? primitive : String(primitive);
+}
+
+function replaceTextAll(source: string, query: string, replacement: string, caseSensitive: boolean): string {
+  if (!query) return source;
+  const haystack = caseSensitive ? source : source.toLowerCase();
+  const needle = caseSensitive ? query : query.toLowerCase();
+  let from = 0;
+  let out = "";
+  while (from <= haystack.length) {
+    const at = haystack.indexOf(needle, from);
+    if (at < 0) {
+      out += source.slice(from);
+      break;
+    }
+    out += source.slice(from, at) + replacement;
+    from = at + needle.length;
+  }
+  return out;
 }
 
 function numericLike(value: unknown): number | null {
@@ -312,10 +353,25 @@ function xlsxToSnapshot(bytes: Uint8Array, name: string): Promise<IWorkbookData>
   });
 }
 
+/** 桥接库把 Univer 的 vt=3(底端) 写成 Excel 顶端，导出前做一次数值映射 */
+function remapVerticalForExport(snapshot: IWorkbookData): IWorkbookData {
+  const styles = snapshot.styles as Record<string, Record<string, unknown>> | undefined;
+  if (!styles) return snapshot;
+  const mapped: Record<string, Record<string, unknown>> = {};
+  for (const [id, style] of Object.entries(styles)) {
+    const next = { ...style };
+    const vertical = Number(next.vt);
+    if (vertical === 3) next.vt = 2;
+    else if (vertical === 2) next.vt = 0;
+    mapped[id] = next;
+  }
+  return { ...snapshot, styles: mapped as IWorkbookData["styles"] };
+}
+
 function snapshotToXlsx(snapshot: IWorkbookData): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     LuckyExcel.transformUniverToExcel({
-      snapshot,
+      snapshot: remapVerticalForExport(snapshot),
       fileName: "soroban.xlsx",
       getBuffer: true,
       success: (buffer) => {
@@ -360,6 +416,53 @@ function readFormatState(range: FRange): FormatState {
   };
 }
 
+function readCellToolState(sheet: FWorksheet, row: number, column: number): CellToolState {
+  const merged = Boolean(sheet.getCellMergeData(row, column));
+  let wrap = false;
+  let vertical: CellToolState["vertical"] = "middle";
+  try {
+    const range = sheet.getRange(row, column);
+    wrap = range.getWrap();
+    const raw = range.getVerticalAlignment();
+    if (raw === "top" || raw === "bottom" || raw === "middle") vertical = raw;
+  } catch {
+    /* 单元格样式未就绪时沿用默认 */
+  }
+  return { merged, wrap, vertical };
+}
+
+/** 开自动换行后按列宽估算行数并固定行高，避免保存重开后文字被压成一行 */
+function fitWrappedRows(sheet: FWorksheet, range: FRange): void {
+  const values = range.getValues();
+  const rowCount = values.length;
+  const columnCount = values[0]?.length ?? 0;
+  for (let rowOffset = 0; rowOffset < rowCount; rowOffset += 1) {
+    let maxLines = 1;
+    for (let columnOffset = 0; columnOffset < columnCount; columnOffset += 1) {
+      const value = values[rowOffset]?.[columnOffset];
+      if (value === null || value === undefined || value === "") continue;
+      const row = range.getRow() + rowOffset;
+      const column = range.getColumn() + columnOffset;
+      const merge = sheet.getCellMergeData(row, column) as unknown as {
+        startRow: number;
+        endRow: number;
+        startColumn: number;
+        endColumn: number;
+      } | null;
+      if (merge && (merge.startRow !== row || merge.startColumn !== column)) continue;
+      const endColumn = merge?.endColumn ?? column;
+      let width = 0;
+      for (let index = column; index <= endColumn; index += 1) width += sheet.getColumnWidth(index);
+      const charsPerLine = Math.max(4, Math.floor((width - 8) / 10.5));
+      const lines = Math.max(1, Math.ceil(String(value).length / charsPerLine));
+      if (lines > maxLines) maxLines = lines;
+    }
+    if (maxLines > 1) {
+      sheet.setRowHeightsForced(range.getRow() + rowOffset, 1, Math.min(409, Math.max(24, maxLines * 24 + 8)));
+    }
+  }
+}
+
 export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
   { docKey, docPath, name, bytes, initialRows, initialSheetName, onReady, onSheetCount, onDirty, onError, onInfo, onCsvImport, onCsvExport, onState },
   ref,
@@ -380,9 +483,20 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
   const [libraryQuery, setLibraryQuery] = useState("");
   const [libraryCommon, setLibraryCommon] = useState(false);
   const [libraryIndex, setLibraryIndex] = useState(0);
-  const [tabs, setTabs] = useState<{ id: string; name: string }[]>([]);
+  const [tabs, setTabs] = useState<SheetTab[]>([]);
+  const [findOpen, setFindOpen] = useState(false);
+  const [findReplace, setFindReplace] = useState(false);
+  const [findQuery, setFindQuery] = useState("");
+  const [findReplacement, setFindReplacement] = useState("");
+  const [findCase, setFindCase] = useState(false);
+  const [findMatches, setFindMatches] = useState<{ row: number; column: number; formula: boolean }[]>([]);
+  const [findIndex, setFindIndex] = useState(0);
+  const [findNotice, setFindNotice] = useState("");
+  const findInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState("");
   const [formatState, setFormatState] = useState<FormatState>(DEFAULT_FORMAT);
+  const [cellToolsOpen, setCellToolsOpen] = useState(false);
+  const [cellToolState, setCellToolState] = useState<CellToolState>(EMPTY_CELL_TOOLS);
   const [chartOpen, setChartOpen] = useState(false);
   const [chartType, setChartType] = useState<ChartType>("column");
   const [chartTitle, setChartTitle] = useState("");
@@ -432,7 +546,7 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
     const book = apiRef.current?.getActiveWorkbook();
     if (!book) return;
     const sheets = book.getSheets();
-    setTabs(sheets.map((s) => ({ id: s.getSheetId(), name: s.getSheetName() })));
+    setTabs(sheets.map((s) => ({ id: s.getSheetId(), name: s.getSheetName(), color: s.getTabColor() })));
     setActiveTab(book.getActiveSheet()?.getSheetId() ?? "");
     setFreezeInfo(readFreezeState());
     callbacksRef.current.onSheetCount(sheets.length);
@@ -552,12 +666,14 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
     if (!sheet || !cell) {
       setActiveAddr("A1");
       setFormatState(DEFAULT_FORMAT);
+      setCellToolState(EMPTY_CELL_TOOLS);
       setDataContext(EMPTY_DATA_CONTEXT);
       setFreezeInfo(null);
       if (!editingRef.current) setCellText("");
       return;
     }
     setActiveAddr(`${columnLetter(cell.startColumn)}${cell.startRow + 1}`);
+    setCellToolState(readCellToolState(sheet, cell.startRow, cell.startColumn));
     if (!editingRef.current) {
       const range = sheet.getRange(cell.startRow, cell.startColumn);
       const formula = range.getFormula();
@@ -660,6 +776,137 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
       }
     },
     [activeRange, formatState.bold, formatState.italic, formatState.underline],
+  );
+
+  const applyCellTool = useCallback(
+    (action: CellToolAction) => {
+      const range = activeRange();
+      const sheet = apiRef.current?.getActiveWorkbook()?.getActiveSheet();
+      const api = apiRef.current;
+      if (!range || !sheet || !api) return;
+      const row = range.getRow();
+      const column = range.getColumn();
+      const rows = Math.max(1, range.getHeight());
+      const columns = Math.max(1, range.getWidth());
+      const label: Record<string, string> = {
+        "row-above": "已在选区上方插入行",
+        "row-below": "已在选区下方插入行",
+        "row-delete": "已删除选区行",
+        "row-hide": "已隐藏选区行",
+        "row-show": "已显示选区行",
+        "col-left": "已在选区左侧插入列",
+        "col-right": "已在选区右侧插入列",
+        "col-delete": "已删除选区列",
+        "col-hide": "已隐藏选区列",
+        "col-show": "已显示选区列",
+      };
+      try {
+        if (action.type === "merge") {
+          if (action.mode === "unmerge") {
+            const merge = sheet.getCellMergeData(row, column);
+            (merge ?? range).breakApart();
+          } else {
+            if (rows < 2 && columns < 2) throw new Error("请先选中两个以上单元格再合并");
+            range.merge({ defaultMerge: true, isForceMerge: true });
+            if (action.mode === "center") {
+              sheet
+                .getRange(row, column, rows, columns)
+                .setHorizontalAlignment("center")
+                .setVerticalAlignment("middle")
+                .setWrapStrategy(WrapStrategy.WRAP);
+            }
+          }
+        } else if (action.type === "border") {
+          const borderType =
+            action.value === "outside"
+              ? api.Enum.BorderType.OUTSIDE
+              : action.value === "all"
+                ? api.Enum.BorderType.ALL
+                : action.value === "horizontal"
+                  ? api.Enum.BorderType.HORIZONTAL
+                  : action.value === "vertical"
+                    ? api.Enum.BorderType.VERTICAL
+                    : action.value === "top"
+                      ? api.Enum.BorderType.TOP
+                      : action.value === "bottom"
+                        ? api.Enum.BorderType.BOTTOM
+                        : action.value === "left"
+                          ? api.Enum.BorderType.LEFT
+                          : action.value === "right"
+                            ? api.Enum.BorderType.RIGHT
+                            : api.Enum.BorderType.NONE;
+          range.setBorder(
+            borderType,
+            action.value === "none" ? api.Enum.BorderStyleTypes.NONE : api.Enum.BorderStyleTypes.THIN,
+            "#8fb3a2",
+          );
+        } else if (action.type === "wrap") {
+          range.setWrapStrategy(action.value ? WrapStrategy.WRAP : WrapStrategy.OVERFLOW);
+          if (action.value) fitWrappedRows(sheet, range);
+        } else if (action.type === "vertical") {
+          range.setVerticalAlignment(action.value);
+        } else {
+          switch (action.value) {
+            case "row-above":
+              sheet.insertRowsBefore(row, rows);
+              break;
+            case "row-below":
+              sheet.insertRowsAfter(row + rows - 1, rows);
+              break;
+            case "row-delete":
+              sheet.deleteRows(row, rows);
+              break;
+            case "row-hide":
+              sheet.hideRows(row, rows);
+              break;
+            case "row-show":
+              sheet.showRows(row, rows);
+              break;
+            case "col-left":
+              sheet.insertColumnsBefore(column, columns);
+              break;
+            case "col-right":
+              sheet.insertColumnsAfter(column + columns - 1, columns);
+              break;
+            case "col-delete":
+              sheet.deleteColumns(column, columns);
+              break;
+            case "col-hide":
+              sheet.hideColumns(column, columns);
+              break;
+            case "col-show":
+              sheet.showColumns(column, columns);
+              break;
+            default:
+              break;
+          }
+        }
+        callbacksRef.current.onDirty();
+        if (action.type === "merge") {
+          callbacksRef.current.onInfo(
+            action.mode === "unmerge" ? "已取消合并单元格" : action.mode === "center" ? "已合并并居中" : "已合并单元格",
+          );
+        } else if (action.type === "border") {
+          callbacksRef.current.onInfo(action.value === "none" ? "已清除选区边框" : "已应用选区边框");
+        } else if (action.type === "wrap") {
+          callbacksRef.current.onInfo(action.value ? "已开启自动换行" : "已关闭自动换行");
+        } else if (action.type === "vertical") {
+          callbacksRef.current.onInfo(
+            action.value === "top" ? "已顶端对齐" : action.value === "bottom" ? "已底端对齐" : "已垂直居中",
+          );
+        } else {
+          callbacksRef.current.onInfo(label[action.value] ?? "已修改表格结构");
+        }
+        window.setTimeout(() => {
+          syncActiveCell();
+          refreshDataContext();
+          refreshTabs();
+        }, 100);
+      } catch (err) {
+        callbacksRef.current.onError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [activeRange, refreshDataContext, refreshTabs, syncActiveCell],
   );
 
   const applyConditional = useCallback(
@@ -889,7 +1136,7 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
     }, 240);
   }, [cellText, syncActiveCell]);
 
-  const sortBy = useCallback((direction: "asc" | "desc", explicitColumn?: number) => {
+  const sortByKeys = useCallback((keys: SortKey[]) => {
     const book = apiRef.current?.getActiveWorkbook();
     const sheet = book?.getActiveSheet();
     const range = selectedDataRange();
@@ -902,12 +1149,15 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
 
     const values = range.getValues() as unknown[][];
     const formulas = range.getFormulas();
-    const current = sheet.getSelection()?.getCurrentCell();
-    const sortColumn = Math.min(
-      Math.max(explicitColumn ?? current?.startColumn ?? startColumn, startColumn),
-      startColumn + columnCount - 1,
-    );
-    const columnOffset = sortColumn - startColumn;
+    const seen = new Set<number>();
+    const keyList: { column: number; offset: number; direction: SortKey["direction"]; order: string[] }[] = [];
+    for (const key of keys) {
+      const column = Math.min(Math.max(key.column, startColumn), startColumn + columnCount - 1);
+      if (seen.has(column)) continue;
+      seen.add(column);
+      keyList.push({ column, offset: column - startColumn, direction: key.direction, order: key.order ?? [] });
+    }
+    if (!keyList.length) return { ok: false, message: "请至少设置一个排序条件" };
     const hasHeader = detectHeaderRow(values);
     const dataStart = hasHeader ? 1 : 0;
     const dataCount = rowCount - dataStart;
@@ -917,19 +1167,32 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
     const order: Record<number, number> = {};
     const indexes = Array.from({ length: dataCount }, (_, index) => index);
     indexes.sort((a, b) => {
-      const left = values[dataStart + a]?.[columnOffset];
-      const right = values[dataStart + b]?.[columnOffset];
-      const leftNumber = numericLike(left);
-      const rightNumber = numericLike(right);
-      if (leftNumber !== null && rightNumber !== null && leftNumber !== rightNumber) {
-        return direction === "asc" ? leftNumber - rightNumber : rightNumber - leftNumber;
+      for (const key of keyList) {
+        const left = values[dataStart + a]?.[key.offset];
+        const right = values[dataStart + b]?.[key.offset];
+        const leftText = toCellText(left);
+        const rightText = toCellText(right);
+        if (key.direction === "custom" && key.order.length > 0) {
+          const leftRank = key.order.findIndex((item) => item === leftText.trim());
+          const rightRank = key.order.findIndex((item) => item === rightText.trim());
+          if (leftRank >= 0 && rightRank >= 0 && leftRank !== rightRank) return leftRank - rightRank;
+          if (leftRank >= 0 && rightRank < 0) return -1;
+          if (leftRank < 0 && rightRank >= 0) return 1;
+          const fallback = leftText.localeCompare(rightText, "zh-CN", { numeric: true });
+          if (fallback !== 0) return fallback;
+          continue;
+        }
+        const leftNumber = numericLike(left);
+        const rightNumber = numericLike(right);
+        if (leftNumber !== null && rightNumber !== null && leftNumber !== rightNumber) {
+          return key.direction === "asc" ? leftNumber - rightNumber : rightNumber - leftNumber;
+        }
+        if (leftNumber !== null && rightNumber === null) return -1;
+        if (leftNumber === null && rightNumber !== null) return 1;
+        const compared = leftText.localeCompare(rightText, "zh-CN", { numeric: true });
+        if (compared !== 0) return key.direction === "asc" ? compared : -compared;
       }
-      if (leftNumber !== null && rightNumber === null) return -1;
-      if (leftNumber === null && rightNumber !== null) return 1;
-      const leftText = toCellText(left);
-      const rightText = toCellText(right);
-      const compared = leftText.localeCompare(rightText, "zh-CN", { numeric: true });
-      return direction === "asc" ? compared : -compared;
+      return 0;
     });
 
     for (let index = 0; index < dataCount; index += 1) {
@@ -974,18 +1237,29 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
       syncActiveCell();
       setChartTick((tick) => tick + 1);
     }, 220);
-    const directionLabel = direction === "asc" ? "升序" : "降序";
-    const message = `已按 ${columnLabel(sortColumn)} 列${directionLabel}排列 ${dataCount} 行`;
+    const keyLabel = keyList
+      .map((key) => `${columnLabel(key.column)} ${key.direction === "asc" ? "升序" : key.direction === "desc" ? "降序" : "自定义序列"}`)
+      .join("、");
+    const message = `已按 ${keyLabel} 排列 ${dataCount} 行`;
     callbacksRef.current.onInfo(message);
     return { ok: true, message };
   }, [clearFilterInternal, selectedDataRange, syncActiveCell]);
 
-  const filterBy = useCallback((column: number, operator: FilterOperator, value: string) => {
+  const sortBy = useCallback((direction: "asc" | "desc", explicitColumn?: number) => {
+    const book = apiRef.current?.getActiveWorkbook();
+    const sheet = book?.getActiveSheet();
+    const range = selectedDataRange();
+    if (!book || !sheet || !range) return { ok: false, message: "没有可排序的数据区域" };
+    const current = sheet.getSelection()?.getCurrentCell();
+    const column = explicitColumn ?? current?.startColumn ?? range.getColumn();
+    return sortByKeys([{ column, direction }]);
+  }, [selectedDataRange, sortByKeys]);
+
+  const filterByConditions = useCallback((conditions: FilterCondition[], mode: FilterMode = "and") => {
     const book = apiRef.current?.getActiveWorkbook();
     const sheet = book?.getActiveSheet();
     const range = selectedDataRange();
     if (!book || !sheet || !range) return { ok: false, message: "没有可筛选的数据区域" };
-    clearFilterInternal(true);
     const startRow = range.getRow();
     const startColumn = range.getColumn();
     const rowCount = range.getHeight();
@@ -995,15 +1269,29 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
     const dataStart = hasHeader ? 1 : 0;
     const dataCount = rowCount - dataStart;
     if (dataCount < 1) return { ok: false, message: "数据行不足，无法筛选" };
-    const filterColumn = Math.min(Math.max(column, startColumn), startColumn + columnCount - 1);
-    const columnOffset = filterColumn - startColumn;
-    const needle = value.trim();
-    const matchedRows: number[] = [];
 
+    const valid = conditions
+      .map((condition) => {
+        const column = Math.min(Math.max(condition.column, startColumn), startColumn + columnCount - 1);
+        return {
+          column,
+          offset: column - startColumn,
+          operator: condition.operator,
+          value: condition.value.trim(),
+        };
+      })
+      .filter((condition) => condition.value !== "");
+    if (!valid.length) return { ok: false, message: "请至少填写一个筛选值" };
+
+    clearFilterInternal(true);
+    const matchedRows: number[] = [];
     let hideStart = -1;
     for (let index = 0; index < dataCount; index += 1) {
       const absoluteRow = startRow + dataStart + index;
-      const matched = matchFilter(values[dataStart + index]?.[columnOffset], operator, needle);
+      const results = valid.map((condition) =>
+        matchFilter(values[dataStart + index]?.[condition.offset], condition.operator, condition.value),
+      );
+      const matched = mode === "and" ? results.every(Boolean) : results.some(Boolean);
       if (matched) {
         matchedRows.push(absoluteRow);
         if (hideStart >= 0) {
@@ -1026,19 +1314,31 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
     // hideRows 会把活动区漂到末行，筛选后回到表头，避免状态栏显示成一行
     sheet.setActiveSelection(sheet.getRange(startRow, startColumn, 1, 1));
     syncActiveCell();
-    const headerLabel = hasHeader && toCellText(values[0]?.[columnOffset]).trim() !== ""
-      ? toCellText(values[0][columnOffset]).trim()
-      : "列";
+    const labeled = valid.map((condition) => {
+      const header = hasHeader ? toCellText(values[0]?.[condition.offset]).trim() : "";
+      return {
+        columnLabel: `${columnLabel(condition.column)}${header ? ` ${header}` : ""}`,
+        operator: filterOperatorLabel(condition.operator),
+        value: condition.value,
+      };
+    });
     setFilterInfo({
-      columnLabel: `${columnLabel(filterColumn)} ${headerLabel}`,
-      operator: filterOperatorLabel(operator),
-      value: needle,
+      columnLabel: labeled[0].columnLabel,
+      operator: labeled[0].operator,
+      value: labeled[0].value,
       matched: matchedRows.length,
       total: dataCount,
+      ...(valid.length > 1 ? { conditions: labeled, mode } : {}),
     });
-    callbacksRef.current.onInfo(`筛选命中 ${matchedRows.length}/${dataCount} 行`);
-    return { ok: true, message: `筛选命中 ${matchedRows.length}/${dataCount} 行` };
+    const modeText = mode === "and" ? "全部满足" : "任一满足";
+    const suffix = valid.length > 1 ? ` · ${valid.length} 个条件${modeText}` : "";
+    callbacksRef.current.onInfo(`筛选命中 ${matchedRows.length}/${dataCount} 行${suffix}`);
+    return { ok: true, message: `筛选命中 ${matchedRows.length}/${dataCount} 行${suffix}` };
   }, [clearFilterInternal, selectedDataRange, syncActiveCell]);
+
+  const filterBy = useCallback((column: number, operator: FilterOperator, value: string) => {
+    return filterByConditions([{ column, operator, value }], "and");
+  }, [filterByConditions]);
 
   const clearFilter = useCallback(() => {
     clearFilterInternal(false);
@@ -1103,6 +1403,21 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
     window.setTimeout(() => persistCf(), 180);
     return true;
   }, [charts, persistCf, refreshTabs, updateCharts]);
+
+  const setSheetColor = useCallback((sheetId: string, color: string) => {
+    const book = apiRef.current?.getActiveWorkbook();
+    const sheet = book?.getSheets().find((item) => item.getSheetId() === sheetId);
+    if (!book || !sheet) return false;
+    try {
+      sheet.setTabColor(color || "");
+    } catch {
+      return false;
+    }
+    refreshTabs();
+    callbacksRef.current.onDirty();
+    callbacksRef.current.onInfo(color ? "已设置工作表标签颜色" : "已清除工作表标签颜色");
+    return true;
+  }, [refreshTabs]);
 
   const duplicateSheet = useCallback(() => {
     const book = apiRef.current?.getActiveWorkbook();
@@ -1326,6 +1641,163 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
     setPrintPreview(buildPreview(printSettings));
   }, [buildPreview, printOpen, printSettings]);
 
+  const collectFindMatches = useCallback((query: string, caseSensitive: boolean) => {
+    const sheet = apiRef.current?.getActiveWorkbook()?.getActiveSheet();
+    if (!sheet || !query) return [];
+    const lastRow = Math.max(0, sheet.getLastRow());
+    const lastColumn = Math.max(0, sheet.getLastColumn());
+    const columns = lastColumn + 1;
+    const rows = Math.min(lastRow + 1, Math.max(1, Math.floor(2000000 / Math.max(1, columns))));
+    if (rows <= 0) return [];
+    const values = sheet.getRange(0, 0, rows, columns).getValues() as unknown[][];
+    const formulas = sheet.getRange(0, 0, rows, columns).getFormulas();
+    const needle = caseSensitive ? query : query.toLowerCase();
+    const hits: { row: number; column: number; formula: boolean }[] = [];
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = 0; column < columns; column += 1) {
+        const formula = formulas[row]?.[column] ?? "";
+        const text = formula || toCellText(values[row]?.[column]);
+        if (!text) continue;
+        const hay = caseSensitive ? text : text.toLowerCase();
+        if (hay.includes(needle)) hits.push({ row, column, formula: Boolean(formula) });
+      }
+    }
+    return hits;
+  }, []);
+
+  const focusFindMatch = useCallback((item: { row: number; column: number } | undefined) => {
+    if (!item) return;
+    const sheet = apiRef.current?.getActiveWorkbook()?.getActiveSheet();
+    if (!sheet) return;
+    sheet.setActiveSelection(sheet.getRange(item.row, item.column, 1, 1));
+    syncActiveCell();
+  }, [syncActiveCell]);
+
+  const runFind = useCallback((rawQuery: string, caseSensitive: boolean) => {
+    const query = rawQuery;
+    if (!query) {
+      setFindMatches([]);
+      setFindIndex(0);
+      setFindNotice("");
+      return;
+    }
+    const hits = collectFindMatches(query, caseSensitive);
+    setFindMatches(hits);
+    setFindIndex(0);
+    setFindNotice(hits.length ? `找到 ${hits.length} 处` : "没有匹配内容");
+    focusFindMatch(hits[0]);
+  }, [collectFindMatches, focusFindMatch]);
+
+  const stepFind = useCallback((step: number) => {
+    if (!findMatches.length) {
+      const hits = collectFindMatches(findQuery, findCase);
+      setFindMatches(hits);
+      if (!hits.length) {
+        setFindNotice(findQuery ? "没有匹配内容" : "");
+        return;
+      }
+      setFindIndex(0);
+      setFindNotice(`找到 ${hits.length} 处`);
+      focusFindMatch(hits[0]);
+      return;
+    }
+    const next = (findIndex + step + findMatches.length) % findMatches.length;
+    setFindIndex(next);
+    setFindNotice(`第 ${next + 1} / ${findMatches.length} 处`);
+    focusFindMatch(findMatches[next]);
+  }, [collectFindMatches, findCase, findIndex, findMatches, findQuery, focusFindMatch]);
+
+  const replaceCurrent = useCallback(() => {
+    const sheet = apiRef.current?.getActiveWorkbook()?.getActiveSheet();
+    const item = findMatches[findIndex];
+    if (!sheet || !findQuery || !item) {
+      runFind(findQuery, findCase);
+      return;
+    }
+    if (item.formula) {
+      setFindNotice("公式单元格只查找、不替换");
+      stepFind(1);
+      return;
+    }
+    const range = sheet.getRange(item.row, item.column);
+    const before = toCellText(range.getValue());
+    const next = replaceTextAll(before, findQuery, findReplacement, findCase);
+    range.setValue(next === "" ? { v: null, f: null, p: null } : next);
+    try {
+      apiRef.current?.getFormula().executeCalculation();
+    } catch {
+      /* ignore */
+    }
+    callbacksRef.current.onDirty();
+    const hits = collectFindMatches(findQuery, findCase);
+    setFindMatches(hits);
+    const pos = Math.min(findIndex, Math.max(0, hits.length - 1));
+    setFindIndex(pos);
+    setFindNotice(`已替换 1 处 · 还剩 ${hits.length} 处`);
+    focusFindMatch(hits[pos]);
+    window.setTimeout(() => syncActiveCell(), 160);
+  }, [collectFindMatches, findCase, findIndex, findMatches, findQuery, findReplacement, focusFindMatch, runFind, stepFind, syncActiveCell]);
+
+  const replaceAll = useCallback(() => {
+    const items = collectFindMatches(findQuery, findCase);
+    if (!findQuery || !items.length) {
+      setFindNotice(findQuery ? "没有匹配内容" : "");
+      return;
+    }
+    const sheet = apiRef.current?.getActiveWorkbook()?.getActiveSheet();
+    if (!sheet) return;
+    let count = 0;
+    let skipped = 0;
+    for (const item of items) {
+      if (item.formula) {
+        skipped += 1;
+        continue;
+      }
+      const range = sheet.getRange(item.row, item.column);
+      const before = toCellText(range.getValue());
+      const next = replaceTextAll(before, findQuery, findReplacement, findCase);
+      if (next === before) continue;
+      range.setValue(next === "" ? { v: null, f: null, p: null } : next);
+      count += 1;
+    }
+    try {
+      apiRef.current?.getFormula().executeCalculation();
+    } catch {
+      /* ignore */
+    }
+    if (count) callbacksRef.current.onDirty();
+    setFindMatches([]);
+    setFindIndex(0);
+    setFindNotice(
+      count
+        ? `已替换 ${count} 处${skipped ? `，跳过 ${skipped} 个公式单元格` : ""}`
+        : "没有可替换的内容",
+    );
+    window.setTimeout(() => syncActiveCell(), 160);
+  }, [collectFindMatches, findCase, findQuery, findReplacement, syncActiveCell]);
+
+  const openFind = useCallback((replace = false) => {
+    setFindOpen(true);
+    setFindReplace(replace);
+    window.setTimeout(() => {
+      findInputRef.current?.focus();
+      findInputRef.current?.select();
+    }, 40);
+  }, []);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const key = event.key.toLowerCase();
+      if (key !== "f" && key !== "h") return;
+      event.preventDefault();
+      event.stopPropagation();
+      openFind(key === "h");
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [openFind]);
+
   useImperativeHandle(
     ref,
     () => ({
@@ -1341,6 +1813,14 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
         const snapshot = book.save();
         return snapshotToXlsx(snapshot);
       },
+      isEditing: () => editingRef.current,
+      openFind,
+      findState: () => ({
+        open: findOpen,
+        query: findQuery,
+        matches: findMatches.length,
+        index: findMatches.length ? findIndex + 1 : 0,
+      }),
       getSnapshot: () => apiRef.current?.getActiveWorkbook()?.save() ?? null,
       undo: () => {
         apiRef.current?.getActiveWorkbook()?.undo();
@@ -1349,6 +1829,7 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
         apiRef.current?.getActiveWorkbook()?.redo();
       },
       sheetCount: () => apiRef.current?.getActiveWorkbook()?.getSheets().length ?? 0,
+      sheetTabs: () => tabs.map((tab) => ({ id: tab.id, name: tab.name, color: tab.color })),
       selectCell: (row, column) => {
         apiRef.current?.getActiveWorkbook()?.getActiveSheet()?.getRange(row, column).activate();
         syncActiveCell();
@@ -1376,7 +1857,9 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
         return (sheet?.getRange(row, column).getCellStyleData() as unknown as Record<string, unknown>) ?? null;
       },
       sortBy,
+      sortByKeys,
       filterBy,
+      filterByConditions,
       clearFilter,
       filterInfo: () => filterInfo,
       freeze: setFreeze,
@@ -1384,6 +1867,7 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
       sheetNames: () => apiRef.current?.getActiveWorkbook()?.getSheets().map((sheet) => sheet.getSheetName()) ?? [],
       activeSheetName: () => apiRef.current?.getActiveWorkbook()?.getActiveSheet()?.getSheetName() ?? "",
       renameSheet,
+      setSheetColor,
       duplicateSheet,
       deleteSheet,
       csvText,
@@ -1420,7 +1904,12 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
       duplicateSheet,
       filterBy,
       filterInfo,
+      findIndex,
+      findMatches,
+      findOpen,
+      findQuery,
       hiddenRows,
+      openFind,
       openPrint,
       printOpen,
       printPreview,
@@ -1428,8 +1917,12 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
       readFreezeState,
       renameSheet,
       setFreeze,
+      setSheetColor,
       sortBy,
+      sortByKeys,
+      filterByConditions,
       syncActiveCell,
+      tabs,
     ],
   );
 
@@ -1488,6 +1981,19 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
       if (disposed) return;
       const book = univerAPI.createWorkbook(snapshot ?? {});
       bookRef.current = book;
+      // 旧文件 / 桥接导入可能把整张已用区域写成活动选区，Univer 会为首屏绘制整块选区。
+      // 只收敛异常的大选区；普通文件的 A1 / 小选区保持原样，避免合并单元格被改选到下一行。
+      for (const sheet of book.getSheets()) {
+        try {
+          const active = sheet.getSelection()?.getActiveRange();
+          const cells = active ? active.getHeight() * active.getWidth() : 0;
+          if (!active || cells > 5000 || active.getHeight() > 500 || active.getWidth() > 200) {
+            sheet.setActiveSelection(sheet.getRange(0, 0, 1, 1));
+          }
+        } catch {
+          /* 隐藏表或异常区域不影响打开 */
+        }
+      }
       if (!bytes && initialRows && initialRows.length > 0) {
         const sheet = book.getActiveSheet();
         if (sheet) {
@@ -1521,7 +2027,7 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
               /* 名称冲突时保留默认 Sheet1 */
             }
           }
-          sheet.setActiveSelection(sheet.getRange(0, 0, Math.max(1, matrix.length), columns));
+          sheet.setActiveSelection(sheet.getRange(0, 0, 1, 1));
         }
       }
       const sidecarGroups = loadCfRules(cfStorageKey(docPath, name));
@@ -1623,6 +2129,26 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
     };
   }, [libraryOpen]);
 
+  useEffect(() => {
+    if (!cellToolsOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && (target.closest(".cell-tools") || target.closest(".cell-tools-mark"))) {
+        return;
+      }
+      setCellToolsOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setCellToolsOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [cellToolsOpen]);
+
   return (
     <div className="sheet-host">
       <FormatToolbar
@@ -1637,14 +2163,15 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
         freeze={freezeInfo}
         sheets={tabs}
         activeSheetId={activeTab}
-        onSort={(column, direction) => sortBy(direction, column)}
-        onFilter={filterBy}
+        onSort={(keys) => sortByKeys(keys)}
+        onFilter={filterByConditions}
         onClearFilter={clearFilter}
         onFreeze={setFreeze}
         onImportCsv={onCsvImport}
         onExportCsv={onCsvExport}
         onActivateSheet={activateTab}
         onRenameSheet={renameSheet}
+        onSetSheetColor={setSheetColor}
         onDuplicateSheet={duplicateSheet}
         onDeleteSheet={deleteSheet}
         onAddSheet={addSheet}
@@ -1667,6 +2194,37 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
           title="打开函数库"
         >
           fx
+        </button>
+        <button
+          type="button"
+          className={`find-mark${findOpen ? " active" : ""}`}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => openFind(false)}
+          title="查找与替换（Ctrl+F）"
+          aria-label="查找与替换"
+        >
+          <svg viewBox="0 0 16 16" aria-hidden>
+            <circle cx="7" cy="7" r="4.4" fill="none" stroke="currentColor" strokeWidth="1.4" />
+            <path d="M10.3 10.3 14 14" stroke="currentColor" strokeWidth="1.4" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className={`cell-tools-mark${cellToolsOpen ? " active" : ""}`}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            setCellToolsOpen((open) => !open);
+            setLibraryOpen(false);
+          }}
+          title="单元格工具：合并、边框、换行、行列"
+          aria-label="单元格工具"
+        >
+          <svg viewBox="0 0 16 16" aria-hidden>
+            <rect x="2" y="2" width="12" height="12" rx="1.4" fill="none" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M6 2v12M10 2v12M2 6h12M2 10h12" stroke="currentColor" strokeWidth="0.8" opacity=".55" />
+            <circle cx="13.5" cy="13.5" r="2.4" fill="#fff" stroke="currentColor" strokeWidth="1" />
+            <path d="M13.5 12.2v2.6M12.2 13.5h2.6" stroke="currentColor" strokeWidth="0.9" />
+          </svg>
         </button>
         <input
           ref={inputRef}
@@ -1778,6 +2336,14 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
             onClose={() => setSuggestPrefix(null)}
           />
         ) : null}
+        {cellToolsOpen ? (
+          <CellTools
+            state={cellToolState}
+            rangeA1={activeRange()?.getA1Notation() ?? activeAddr}
+            onAction={applyCellTool}
+            onClose={() => setCellToolsOpen(false)}
+          />
+        ) : null}
       </div>
       <div className="sheet-grid" ref={gridRef}>
         <div className="univer-host sheet-container" ref={hostRef} />
@@ -1841,6 +2407,100 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
           +
         </button>
       </div>
+      {findOpen ? (
+        <div className="find-panel" role="dialog" aria-label="查找与替换">
+          <div className="find-head">
+            <span>查找与替换</span>
+            <button
+              className="find-close"
+              title="关闭"
+              onClick={() => {
+                setFindOpen(false);
+                setFindNotice("");
+              }}
+            >
+              ×
+            </button>
+          </div>
+          <div className="find-row">
+            <input
+              ref={findInputRef}
+              className="find-query"
+              value={findQuery}
+              placeholder="要查找的内容"
+              onChange={(event) => {
+                setFindQuery(event.target.value);
+                setFindMatches([]);
+                setFindIndex(0);
+                setFindNotice("");
+              }}
+              onKeyDown={(event) => {
+                if (event.nativeEvent.isComposing) return;
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  setFindOpen(false);
+                  return;
+                }
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  if (event.shiftKey) stepFind(-1);
+                  else if (findMatches.length) stepFind(1);
+                  else runFind(findQuery, findCase);
+                }
+              }}
+            />
+            <button className="find-step" title="上一个" onClick={() => stepFind(-1)}>↑</button>
+            <button className="find-step" title="下一个" onClick={() => stepFind(1)}>↓</button>
+          </div>
+          {findReplace ? (
+            <div className="find-row">
+              <input
+                className="find-replacement"
+                value={findReplacement}
+                placeholder="替换为（可留空）"
+                onChange={(event) => setFindReplacement(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    setFindOpen(false);
+                  }
+                }}
+              />
+            </div>
+          ) : null}
+          <div className="find-meta">
+            <label>
+              <input
+                type="checkbox"
+                checked={findCase}
+                onChange={(event) => {
+                  const next = event.target.checked;
+                  setFindCase(next);
+                  if (findQuery) runFind(findQuery, next);
+                }}
+              />
+              区分大小写
+            </label>
+            <span>{findNotice || (findMatches.length ? `第 ${findIndex + 1} / ${findMatches.length} 处` : "")}</span>
+          </div>
+          <div className="find-actions">
+            {findReplace ? (
+              <>
+                <button className="find-primary" onClick={replaceCurrent}>替换</button>
+                <button onClick={replaceAll}>全部替换</button>
+              </>
+            ) : null}
+            <button
+              className="find-more"
+              onClick={() => setFindReplace((value) => !value)}
+              title={findReplace ? "收起替换栏" : "展开替换栏"}
+            >
+              {findReplace ? "收起替换" : "替换…"}
+            </button>
+          </div>
+          <div className="find-tip">公式单元格只查找；替换不破坏原公式。Ctrl+F / Ctrl+H。</div>
+        </div>
+      ) : null}
       {printOpen ? (
         <PrintStudio
           settings={printSettings}

@@ -5,12 +5,14 @@ import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer-core";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const fixture = path.join(root, "assets", "M4-打印.xlsx");
+const fixtureSource = path.join(root, "assets", "M4-打印.xlsx");
 const out = path.join(root, "review-m4");
+const fixture = path.join(out, "M4-打印-working.xlsx");
 const cdp = process.env.SOROBAN_CDP || "9446";
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 fs.mkdirSync(out, { recursive: true });
+fs.copyFileSync(fixtureSource, fixture);
 const browser = await puppeteer.connect({ browserURL: `http://127.0.0.1:${cdp}`, defaultViewport: null });
 const pages = await browser.pages();
 const page = pages.find((item) => item.url().includes("1421") || item.url().includes("tauri")) || pages[0];
@@ -28,7 +30,7 @@ const log = (line) => {
 
 async function open({ width = 1280, height = 800, clearSettings = true } = {}) {
   await page.setViewport({ width, height, deviceScaleFactor: 1.5 });
-  await page.reload({ waitUntil: "networkidle2" });
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 90000 });
   await page.waitForSelector(".welcome", { timeout: 30000 });
   if (clearSettings) {
     await page.evaluate(() => {
@@ -45,7 +47,7 @@ async function open({ width = 1280, height = 800, clearSettings = true } = {}) {
 
 async function openPrint() {
   await page.evaluate(() => {
-    const button = document.querySelector('.tb-btn[title="打印与分页预览"]');
+    const button = document.querySelector('.tb-btn[title^="打印与分页预览"]');
     if (!(button instanceof HTMLElement)) throw new Error("找不到顶栏打印按钮");
     button.click();
   });
@@ -115,6 +117,7 @@ async function layout() {
       table: table && { width: table.getBoundingClientRect().width, height: table.getBoundingClientRect().height },
       footerText: footer?.innerText ?? null,
       pageCount: document.querySelectorAll(".print-page").length,
+      contentVisibility: document.querySelector(".print-page") ? getComputedStyle(document.querySelector(".print-page")).contentVisibility : null,
       overflow: document.documentElement.scrollWidth > innerWidth,
       topbarOverflow: (() => {
         const bar = document.querySelector(".topbar");
@@ -135,7 +138,7 @@ function assertInside(rect, viewport, name) {
 errors.length = 0;
 await open();
 const topbar = await page.evaluate(() => {
-  const button = document.querySelector('.tb-btn[title="打印与分页预览"]');
+  const button = document.querySelector('.tb-btn[title^="打印与分页预览"]');
   const rect = button?.getBoundingClientRect();
   return { found: Boolean(button), rect: rect && { x: rect.x, y: rect.y, width: rect.width, height: rect.height } };
 });
@@ -157,6 +160,7 @@ assert.equal(base.preview.pages[0].firstCell, "SO-26001");
 assert.equal(base.preview.pages[1].firstCell, "SO-26049");
 const baseLayout = await layout();
 assert.equal(baseLayout.pageCount, 2);
+assert.equal(baseLayout.contentVisibility, "auto", "预览页未启用视口外跳过绘制");
 assert.equal(baseLayout.overflow, false);
 assertInside(baseLayout.shell, baseLayout.viewport, "打印窗口");
 assert.ok(baseLayout.firstPage.width > 450 && baseLayout.firstPage.width < 520, `A4 预览宽度异常 ${baseLayout.firstPage.width}`);
@@ -289,6 +293,7 @@ const media = await page.evaluate(() => {
     bodyClientHeight: body?.clientHeight,
     bodyScrollHeight: body?.scrollHeight,
     pageGap: document.querySelectorAll(".print-page")[1]?.getBoundingClientRect().top - (rect?.bottom ?? 0),
+    contentVisibility: pageEl ? getComputedStyle(pageEl).contentVisibility : null,
     headerDisplay: getComputedStyle(document.querySelector(".print-page-head")).display,
     footerDisplay: getComputedStyle(document.querySelector(".print-page-foot")).display,
   };
@@ -302,6 +307,7 @@ assert.ok(media.tableHeight <= media.bodyClientHeight + 2, "打印态表格溢�
 assert.equal(media.headerDisplay, "flex");
 assert.equal(media.footerDisplay, "flex");
 assert.equal(media.pageGap, 0);
+assert.equal(media.contentVisibility, "visible", "打印态没有恢复全部纸页");
 await page.emulateMediaType("screen");
 log(`M4 PRINT MEDIA OK · 210×297mm · zoom=1 · 表格 ${Math.round(media.tableHeight)}/${media.bodyClientHeight}px`);
 
@@ -382,6 +388,15 @@ await page.screenshot({ path: path.join(out, "412-print-filtered.png") });
 log(`M4 FILTER PRINT OK · 筛选 ${filtered.info.matched}/${filtered.info.total} · 只打印可见 ${filtered.info.matched} 行`);
 await closePrint();
 await page.evaluate(() => window.__soroban.clearFilter());
+
+// 12. Ctrl+P 直接打开打印工作台
+await page.keyboard.down("Control");
+await page.keyboard.press("KeyP");
+await page.keyboard.up("Control");
+await sleep(450);
+assert.equal((await info()).open, true, "Ctrl+P 未打开打印");
+await closePrint();
+log("M4 SHORTCUT OK · Ctrl+P 打开打印");
 
 assert.equal(errors.length, 0, `控制台错误：${errors.join(" | ")}`);
 fs.writeFileSync(path.join(out, process.env.SOROBAN_E2E_LOG || "m4-e2e-dev.txt"), `${lines.join("\n")}\n`, "utf8");

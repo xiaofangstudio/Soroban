@@ -1,0 +1,27 @@
+
+> soroban@0.6.0 tauri
+> tauri dev
+
+     Running BeforeDevCommand (`npm run dev`)
+
+> soroban@0.6.0 dev
+> vite
+
+
+  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m519[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m1421[22m/[39m
+     Running DevCommand (`cargo  run --no-default-features --color always --`)
+        Info Watching D:\20533\deskbox\fangwork\Papyra\Soroban\src-tauri for changes...
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.61s
+     Running `target\debug\soroban.exe`
+        Info File src-tauri\tauri.conf.json changed. Rebuilding application...
+     Running DevCommand (`cargo  run --no-default-features --color always --`)
+   Compiling soroban v0.6.1 (D:\20533\deskbox\fangwork\Papyra\Soroban\src-tauri)
+    Building [=======================> ] 361/365: soroban…
+    Building [=======================> ] 362/365: soroban…
+    Building [=======================> ] 363/365: soroban 
+    Building [=======================> ] 364/365: soroban…
+                                                            
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 29.10s
+     Running `target\debug\soroban.exe`

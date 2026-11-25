@@ -1,0 +1,10 @@
+import puppeteer from "puppeteer-core";
+import path from "node:path";
+const root = "D:/20533/deskbox/fangwork/Papyra/Soroban";
+const browser = await puppeteer.connect({ browserURL: "http://127.0.0.1:9446", defaultViewport: null });
+const pages = await browser.pages();
+const page = pages.find((p) => p.url().includes("1421") || p.url().includes("tauri")) || pages[0];
+const snap = await page.evaluate(() => window.__soroban.getSnapshot());
+const sh = snap.sheets[snap.sheetOrder[0]];
+console.log(JSON.stringify({ mergeData: sh.mergeData, rowData: Object.keys(sh.rowData || {}).slice(0, 3), cellA1: sh.cellData?.[0]?.[0], cellB3: sh.cellData?.[2]?.[1] }, null, 2));
+await browser.disconnect();

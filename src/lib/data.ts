@@ -1,8 +1,12 @@
 export type CsvCell = string | number | boolean | null;
+export type CsvEncoding = "UTF-8" | "GB18030";
+export type CsvDelimiter = "," | "\t" | ";";
 
 export type CsvDecoded = {
   rows: string[][];
-  encoding: "UTF-8" | "GB18030";
+  encoding: CsvEncoding;
+  delimiter: CsvDelimiter;
+  text: string;
 };
 
 const NUMBER_RE = /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/;
@@ -11,8 +15,8 @@ function stripBom(text: string): string {
   return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
 
-function detectDelimiter(text: string): string {
-  const candidates = [",", "\t", ";"];
+export function detectCsvDelimiter(text: string): CsvDelimiter {
+  const candidates: CsvDelimiter[] = [",", "\t", ";"];
   const scores = candidates.map((delimiter) => {
     let count = 0;
     let quoted = false;
@@ -31,10 +35,10 @@ function detectDelimiter(text: string): string {
   return scores[0].count > 0 ? scores[0].delimiter : ",";
 }
 
-export function parseCsvText(input: string): string[][] {
+export function parseCsvText(input: string, forcedDelimiter?: CsvDelimiter): string[][] {
   const text = stripBom(input);
   if (!text) return [];
-  const delimiter = detectDelimiter(text);
+  const delimiter = forcedDelimiter ?? detectCsvDelimiter(text);
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";
@@ -80,16 +84,39 @@ export function parseCsvText(input: string): string[][] {
   return rows;
 }
 
-export function decodeCsvBytes(bytes: Uint8Array): CsvDecoded {
-  let text: string;
-  let encoding: "UTF-8" | "GB18030" = "UTF-8";
-  try {
-    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  } catch {
-    text = new TextDecoder("gb18030").decode(bytes);
-    encoding = "GB18030";
+export function decodeCsvText(bytes: Uint8Array, encoding?: CsvEncoding): { text: string; encoding: CsvEncoding } {
+  if (encoding === "GB18030") {
+    return { text: stripBom(new TextDecoder("gb18030").decode(bytes)), encoding };
   }
-  return { rows: parseCsvText(text), encoding };
+  if (encoding === "UTF-8") {
+    return { text: stripBom(new TextDecoder("utf-8").decode(bytes)), encoding };
+  }
+  try {
+    return { text: stripBom(new TextDecoder("utf-8", { fatal: true }).decode(bytes)), encoding: "UTF-8" };
+  } catch {
+    return { text: stripBom(new TextDecoder("gb18030").decode(bytes)), encoding: "GB18030" };
+  }
+}
+
+export function decodeCsvBytes(bytes: Uint8Array, encoding?: CsvEncoding): CsvDecoded {
+  const force = encoding ?? guessCsvEncoding(bytes);
+  const decoded = decodeCsvText(bytes, force);
+  const delimiter = detectCsvDelimiter(decoded.text);
+  return {
+    rows: parseCsvText(decoded.text, delimiter),
+    encoding: decoded.encoding,
+    delimiter,
+    text: decoded.text,
+  };
+}
+
+export function guessCsvEncoding(bytes: Uint8Array): CsvEncoding {
+  try {
+    new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return "UTF-8";
+  } catch {
+    return "GB18030";
+  }
 }
 
 export function csvCellValue(raw: string): CsvCell {
