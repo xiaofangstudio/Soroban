@@ -167,7 +167,9 @@ assert.ok(baseLayout.firstPage.width > 450 && baseLayout.firstPage.width < 520, 
 assert.ok(baseLayout.body.scrollHeight <= baseLayout.body.clientHeight + 2, "第一页表格被裁切");
 assert.ok(baseLayout.footerText.includes("第 1 / 2 页"), "页脚页码缺失");
 assert.ok(baseLayout.footerText.includes("小方工作室"), "页脚文字缺失");
-assert.ok(baseLayout.footerText.includes("2026/11/25"), "页脚日期缺失");
+const now = new Date();
+const today = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${String(now.getDate()).padStart(2, "0")}`;
+assert.ok(baseLayout.footerText.includes(today), `页脚日期缺失 ${today}`);
 await page.screenshot({ path: path.join(out, "400-print-studio.png") });
 log(`M4 PRINT UI OK · A4 纵向 · 2 页 · ${base.preview.pages[0].rows}+${base.preview.pages[1].rows} 行 · 缩放 ${Math.round(base.preview.scale * 100)}%`);
 

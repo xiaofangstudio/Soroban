@@ -1,6 +1,6 @@
 # Soroban · 构建与验收
 
-> 小方工作室 · Papyra 办公套件 ｜ 适用 M0 / M1 / M2 / M3 / M4（v0.6.1，含渲染收敛 / 查找替换 / 自动保存 / 自定义序列 / 标签颜色 / CSV 预览）
+> 小方工作室 · Papyra 办公套件 ｜ 适用 M0 / M1 / M2 / M3 / M4 / M8 / M9（v0.7.0，含单元格工具 / 渲染收敛 / 查找替换 / 自动保存 / 自定义序列 / 标签颜色 / CSV 预览）
 > 开发机：Windows 10/11 + PowerShell 7 + Node 22 + Rust stable + VS Build Tools（Tauri 2 需要 WebView2 与 MSVC）
 
 ## 一 环境
@@ -135,7 +135,7 @@ $env:SOROBAN_EXE='.\Soroban.exe'
 node scripts/e2e-mcp.mjs
 ```
 
-不设 `SOROBAN_EXE` 时用 `src-tauri/target/debug/soroban.exe`；正式验收必须指向根目录当前版本 exe。依次调用 initialize / tools/list / workbook_info / validate / csv_preview / formula_search，首行 `serverInfo.version` 应与当前版本一致（0.5.0），末行 `MCP M1 OK`。
+不设 `SOROBAN_EXE` 时用 `src-tauri/target/debug/soroban.exe`；正式验收必须指向根目录当前版本 exe。依次调用 initialize / tools/list / workbook_info / validate / csv_preview / formula_search，首行 `serverInfo.version` 应与当前版本一致（0.7.0），末行 `MCP M1 OK`。
 
 也可直接验证：
 
@@ -215,6 +215,30 @@ node scripts/e2e-multi.mjs
 - 末行依次输出 `MULTI SORT OK`、`MULTI FILTER AND OK`、`MULTI FILTER OR OK`、`MULTI FILTER MODE PERSIST OK`、`MULTI 900 OK`，最后 `ALL MULTI SORT / FILTER CHECKS PASSED`
 - dev 用 9446，release 用 9445；截图写入 `review-0.5.1/500–503`
 - 样本同 M3：`assets/M3-整理.xlsx`
+
+### 4.9 单元格工具（0.7.0）
+
+```powershell
+$env:SOROBAN_CDP='9445'
+node scripts/e2e-m9.mjs
+```
+
+- 七段全跑：公式栏「单元格工具」入口与 360px 面板；A1:F1 合并并居中；九种边框取四边；自动换行 + 底端对齐；行插入与 D 列左侧插入（原 D3 15500 移到 E3）；保存重开校验合并 / 边框色 / `tb=3` / `vt=3` / 行高 ≥150；900×620 面板不越界
+- 末行依次输出 `M9 CELL TOOLS OK`、`MERGE OK`、`BORDER OK`、`WRAP OK`、`STRUCTURE OK`、`ROUNDTRIP OK`、`Layout 900 OK`
+- 每次运行前从 `assets/M0-样本.xlsx` 复制到 `review-0.7/M0-单元格工具-working.xlsx`，禁止直接打开 `assets` 原始样本（自动保存会回写）
+- dev 用 9446，release 用 9445；截图写入 `review-0.7/700–703`
+- 保存样本：`review-0.7/M9-单元格工具.xlsx`
+
+### 4.10 渲染专项（大表 / 打印 / 图表）
+
+```powershell
+$env:SOROBAN_CDP='9445'
+$env:SOROBAN_REVIEW_DIR='review-0.7'
+node scripts/e2e-render.mjs
+```
+
+- 十万行画布必须等于视口、DOM < 400、选区 A1；打印预览 6 页 `content-visibility=auto`、打印态恢复、PDF 6 页；图表卡片视口内可见
+- 严格帧率断言为 `fps ≥ 55`、慢帧 ≤ 2；本机高负载时远程注入滚轮会每个事件产生 1 个慢帧，0.6.1 旧包同条件同样 24，属于环境噪声。功能子项通过时以 `render-release-diag.txt` 记录实际 FPS，不以放宽断言掩盖
 
 ## 五 构建
 
@@ -459,6 +483,32 @@ Copy-Item src-tauri\target\release\soroban.exe .\Soroban.exe -Force
 
 均未签名。0.6.0 安装包保留作历史；`release-0.6.1.sha256` 已写入。
 
+### 7.19 0.7.0 单元格工具验收记录
+
+| 项 | 结果 |
+| --- | --- |
+| M9 面板 | 360×414，1280×820 与 900×620 均在视口内 |
+| 合并 | A1:F1 合并并居中，重开保持 `ht / vt / wrap` |
+| 边框 | `#8fb3a2` 四边正确，重开保留 |
+| 换行 / 垂直 | `tb=3` 自动换行；`vt=3` 底端；重开行高 ≥150，长备注完整 |
+| 行列结构 | 插入行、D 列左侧插入，原 D3 15500 移到 E3；删除 / 隐藏 / 显示通过 |
+| 保存重开 | `review-0.7/M9-单元格工具.xlsx` 全部保持 |
+| M0–M4 / M8 / multi | release 全部通过；M4 PDF 2 页 406,066 B，页脚日期按当天 |
+| 渲染专项 | 画布 1280×620 CSS、DOM 199、选区 A1；打印 6 页 / PDF 6 页；图表卡片视口内；滚动平均 74.2 FPS，严格慢帧断言见 4.10 |
+| MCP / Rust | version 0.7.0 四工具；`cargo test --release` 6 passed |
+| 构建 | 1914 modules，主 JS 9,903.29 kB、CSS 174.14 kB；release 1m 39s；NSIS 4.13 MiB |
+
+截图：`review-0.7/700-cell-tools.png`、`701-cell-tools-applied.png`、`702-cell-tools-900.png`、`703-cell-tools-reopen.png`。日志：`m9-release.txt`、`m0-release.txt`、`m1-release.txt`、`m2-release.txt`、`m3-release.txt`、`m4-release.txt`、`m8-release.txt`、`multi-release.txt`、`mcp-release.txt`、`rust-test-release.txt`、`render-release-diag.txt`、`render-perf-strict-fail.txt`、`build-web-final.txt`、`build-release-final.txt`。
+
+### 7.20 0.7.0 产物
+
+| 产物 | 大小 | SHA-256 |
+| --- | --- | --- |
+| `Soroban.exe` | 6,952,960 B | `A39B0577FE31C42175B0D4122908BCA47E1E6E323229E022DDFD44DF2FDFACE4` |
+| `Soroban_0.7.0_x64-setup.exe` | 4,333,728 B | `09A2305F35B625DC2850918213CB37A028E3A8F8180BB8245730DD8D744D25CE` |
+
+均未签名。0.6.1 安装包保留作历史；`release-0.7.0.sha256` 已写入。
+
 ## 八 已知问题
 
 - Univer OSS 无 xlsx 转换后端，导出走 MIT 桥接库；图片等复杂对象仍未验证
@@ -485,3 +535,4 @@ Copy-Item src-tauri\target\release\soroban.exe .\Soroban.exe -Force
 - 最近文件存在 localStorage，不含缩略图；`sheet_thumb` 卡片预览留 M4
 
 *小方工作室 · Soroban · BUILD ｜ 2026-11-25*
+

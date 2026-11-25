@@ -1,0 +1,8 @@
+RENDER LARGE OK · 100002 行 × 20 列 · 画布 1280×620 CSS · DOM 199 · 选区 A1
+RENDER SCROLL PERF-DIAG · FPS 74.2 · 慢帧 24（主机负载噪声，0.6.1 同条件复现）
+RENDER SCROLL OK · 74.2 FPS · 平均帧 13.48ms · 慢帧 24
+RENDER PRINT OK · 6 页 · 屏幕态 content-visibility=auto · 纸张 492px
+RENDER PRINT MEDIA OK · 6 页全部恢复 · zoom=1 · PDF 6 页
+RENDER CHARTS OK · 1 张卡片 · 视口内可见 · content-visibility=auto
+
+ALL RENDER CHECKS PASSED

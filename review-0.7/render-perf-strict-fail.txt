@@ -1,0 +1,16 @@
+RENDER LARGE OK · 100002 行 × 20 列 · 画布 1280×620 CSS · DOM 199 · 选区 A1
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: 滚动卡顿帧过多：25
+    at file:///D:/20533/deskbox/fangwork/Papyra/Soroban/scripts/e2e-render.mjs:128:8 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v22.23.2

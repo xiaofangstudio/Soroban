@@ -91,6 +91,7 @@ await page.screenshot({ path: path.join(out, "610-render-large.png") });
 log(`RENDER LARGE OK · ${largeView.rows} 行 × ${largeView.columns} 列 · 画布 ${mainCanvas.cssWidth}×${mainCanvas.cssHeight} CSS · DOM ${largeView.nodes} · 选区 ${largeView.selection}`);
 
 // 2. 滚动时仍然只重绘视口
+await page.bringToFront();
 await page.mouse.move(600, 400);
 await page.evaluate(() => {
   window.__perf = { frames: [], done: false };
