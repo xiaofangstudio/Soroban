@@ -1,9 +1,0 @@
-open { ms: 10179, rows: 100002, columns: 20, bytes: 10300431 }
-perf {
-  frames: 464,
-  total: 3204.399999998883,
-  averageFrame: 6.88,
-  fps: 145.3,
-  slow: 0
-}
-M1 PERF OK
