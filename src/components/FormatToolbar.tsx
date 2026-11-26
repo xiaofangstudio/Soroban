@@ -27,7 +27,7 @@ export type FormatCommand =
 type Props = {
   state: FormatState;
   onFormat: (command: FormatCommand) => void;
-  onConditional: (kind: "scale" | "bar" | "clear") => void;
+  onConditional: (kind: "scale" | "bar" | "icons" | "formula" | "clear", formula?: string) => void;
   onOpenChart: () => void;
 };
 
@@ -118,6 +118,7 @@ function CfIcon() {
 export function FormatToolbar({ state, onFormat, onConditional, onOpenChart }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<"font" | "fill" | "cf" | "border" | null>(null);
+  const [cfFormula, setCfFormula] = useState("=A1>0");
 
   useEffect(() => {
     if (!menu) return;
@@ -350,6 +351,36 @@ export function FormatToolbar({ state, onFormat, onConditional, onOpenChart }: P
                 <small>按数值长度铺满单元格</small>
               </span>
             </button>
+            <button className="cf-item" onClick={() => { onConditional("icons"); setMenu(null); }}>
+              <span className="cf-icons-preview">
+                <i /><i /><i />
+              </span>
+              <span>
+                <strong>三色图标集</strong>
+                <small>绿 / 黄 / 红三档按百分比分级</small>
+              </span>
+            </button>
+            <div className="cf-formula">
+              <label htmlFor="cf-formula-input">公式规则</label>
+              <div className="cf-formula-row">
+                <input
+                  id="cf-formula-input"
+                  value={cfFormula}
+                  onChange={(event) => setCfFormula(event.target.value)}
+                  placeholder="=A1>0"
+                  spellCheck={false}
+                />
+                <button
+                  onClick={() => {
+                    onConditional("formula", cfFormula);
+                    setMenu(null);
+                  }}
+                >
+                  应用
+                </button>
+              </div>
+              <small>公式返回 TRUE 时，选区套淡黄底并加粗；公式相对选区左上角。</small>
+            </div>
             <button
               className="cf-clear"
               onClick={() => {

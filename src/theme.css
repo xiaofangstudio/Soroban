@@ -983,6 +983,80 @@ input:focus-visible {
 .cf-bar-preview i:nth-child(2) { width: 72%; }
 .cf-bar-preview i:nth-child(3) { width: 44%; }
 
+.cf-icons-preview {
+  flex: 0 0 34px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.cf-icons-preview i {
+  display: block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #24a06b;
+}
+
+.cf-icons-preview i:nth-child(2) { background: #d9a31e; }
+.cf-icons-preview i:nth-child(3) { background: #d24a3a; }
+
+.cf-formula {
+  margin-top: 4px;
+  padding: 8px 7px 7px;
+  border-top: 1px solid #e3f0e8;
+}
+
+.cf-formula label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #557062;
+}
+
+.cf-formula-row {
+  display: flex;
+  gap: 4px;
+}
+
+.cf-formula-row input {
+  min-width: 0;
+  flex: 1;
+  height: 26px;
+  padding: 0 7px;
+  border: 1px solid #d8e6dd;
+  border-radius: 5px;
+  background: #fff;
+  color: #17372a;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.cf-formula-row input:focus {
+  outline: none;
+  border-color: #0e9f6e;
+  box-shadow: 0 0 0 2px rgba(14, 159, 110, 0.12);
+}
+
+.cf-formula-row button {
+  height: 26px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 5px;
+  background: #17372a;
+  color: #fff;
+  font-size: 10.5px;
+}
+
+.cf-formula small {
+  display: block;
+  margin-top: 5px;
+  font-size: 9px;
+  line-height: 1.45;
+  color: #81978c;
+}
+
 .cf-clear {
   width: 100%;
   margin-top: 4px;

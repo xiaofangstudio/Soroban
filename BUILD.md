@@ -1,6 +1,6 @@
 # Soroban · 构建与验收
 
-> 小方工作室 · Papyra 办公套件 ｜ 适用 M0 / M1 / M2 / M3 / M4 / M8 / M9（v0.7.0，含单元格工具 / 渲染收敛 / 查找替换 / 自动保存 / 自定义序列 / 标签颜色 / CSV 预览）
+> 小方工作室 · Papyra 办公套件 ｜ 适用 M0 / M1 / M2 / M3 / M4 / M8 / M9 / M10 / 透视 / 条件格式（v0.10.0）
 > 开发机：Windows 10/11 + PowerShell 7 + Node 22 + Rust stable + VS Build Tools（Tauri 2 需要 WebView2 与 MSVC）
 
 ## 一 环境
@@ -559,11 +559,37 @@ Copy-Item src-tauri\target\release\soroban.exe .\Soroban.exe -Force
 
 均未签名。0.8.0 安装包保留作历史；`release-0.9.0.sha256` 已写入。
 
+### 7.25 0.10.0 条件格式验收记录
+
+| 项 | 结果 |
+| --- | --- |
+| 三色图标集 | D2:D13，67% / 33% 两档：12,000–26,000 红、29,500–36,500 黄、40,000–50,500 绿，原值保留 |
+| 公式规则 | E2:E13，`=D2>30000`：33,000 起 6 行淡黄底加粗 |
+| 保存重开 | `M12-条件格式.xlsx` 重开切 `明细`，规则数 2，active=明细，dirty=false |
+| 菜单 1280 | 236×289（x=589、y=80），scroll=client=288 |
+| 菜单 900 | 236×289（x=589、y=80），右 / 底不越界 |
+| 另存迁移 | sidecar 从 working 路径复制到目标路径，重开目标文件规则仍在 |
+| M0 / M2–M4 / M8–M10 / multi | release 全过 |
+| MCP / Rust | version 0.10.0 四工具；`cargo test --release` 6 passed |
+| 构建 | 1926 modules，主 JS 10,266.73 kB、CSS 180.88 kB；release 4m 48s；NSIS 4.19 MiB |
+
+截图：`review-0.10/920-cf-menu.png`、`921-cf-icons.png`、`922-cf-formula.png`、`923-cf-reopen.png`、`924-cf-900.png`。日志：`cf-release-e2e.txt`、`m0-release.txt`、`m2-release.txt`、`m3-release.txt`、`m4-release.txt`、`m8-release.txt`、`m9-release.txt`、`m10-release.txt`、`multi-release.txt`、`mcp-test.txt`、`rust-test-release.txt`、`build-release.log`。
+
+### 7.26 0.10.0 产物
+
+| 产物 | 大小 | SHA-256 |
+| --- | --- | --- |
+| `Soroban.exe` | 7,011,840 B | `4F7055A213F2576664B66C69B8C20C388996C0CCFC2A5074C8C78317C1C042E4` |
+| `Soroban_0.10.0_x64-setup.exe` | 4,393,453 B | `DDD57EC8971501C583BADEC171CC3AC36E235A546D8FA1BA419156F4822F1E70` |
+
+均未签名。0.9.0 安装包保留作历史；`release-0.10.0.sha256` 已写入。
+
 ## 八 已知问题
 
 - Univer OSS 无 xlsx 转换后端，导出走 MIT 桥接库；图片等复杂对象仍未验证
 - 数据验证已在 0.8.0 写入标准 `<dataValidations>` 与 `xl/soroban-validations.json`；外部 Excel 只显示标准子集（下拉 / 数值），Soroban 专属类型以清单为准
 - 数据透视 0.9.0 是一次性静态汇总：单行字段 + 单列字段 + 单值字段，不写 Excel 原生 PivotTable，不自动刷新，无字段拖拽 / 切片器 / Top N / 日期分组
+- 条件格式 0.10.0 图标集固定三红绿灯 + 67% / 33%；公式规则只认 TRUE / FALSE，图标与公式同区叠加时层级由 Univer 决定，可能压住背景色
 - 图表与条件格式只存 localStorage sidecar（`soroban:charts:*` / `soroban:cf:*`），不随 xlsx 走：换路径、换机器或 Excel 打开都看不到
 - 图表仅支持单表区域、首行表头 + 首列分类；无多区域 / 跨表 / 堆叠 / 次坐标轴 / 缩放
 - 排序最多 3 键，方向支持升 / 降 / 自定义序列；自定义未列值统一排后，无按颜色 / 图标排序；排序不写进 xlsx

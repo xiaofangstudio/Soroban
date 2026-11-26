@@ -13,7 +13,7 @@ import UniverPresetSheetsCoreZhCN from "@univerjs/preset-sheets-core/locales/zh-
 import "@univerjs/sheets-numfmt/facade";
 import "@univerjs/sheets-conditional-formatting/facade";
 import "@univerjs/sheets-data-validation/facade";
-import { CFValueType, UniverSheetsConditionalFormattingPlugin } from "@univerjs/sheets-conditional-formatting";
+import { CFNumberOperator, CFValueType, IIconSetType, UniverSheetsConditionalFormattingPlugin } from "@univerjs/sheets-conditional-formatting";
 import { UniverSheetsConditionalFormattingUIPlugin } from "@univerjs/sheets-conditional-formatting-ui";
 import { UniverSheetsDataValidationPlugin } from "@univerjs/sheets-data-validation";
 import { UniverSheetsDataValidationUIPlugin } from "@univerjs/sheets-data-validation-ui";
@@ -193,6 +193,8 @@ export type EditorHandle = {
   selectRange: (startRow: number, startColumn: number, endRow: number, endColumn: number) => void;
   selectionA1: () => string | null;
   conditionalRuleCount: () => number;
+  applyConditional: (kind: "scale" | "bar" | "icons" | "formula" | "clear", formula?: string) => void;
+  copyConditionalTo: (path: string, name: string) => void;
   validationCount: () => number;
   validationForCell: (row: number, column: number) => { type: string; detail: string; range: string } | null;
   validationStatus: (row: number, column: number) => Promise<string | null>;
@@ -1215,7 +1217,7 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
   }, [activeRange, readValidationSummary]);
 
   const applyConditional = useCallback(
-    (kind: "scale" | "bar" | "clear") => {
+    (kind: "scale" | "bar" | "icons" | "formula" | "clear", formula?: string) => {
       const range = activeRange();
       const sheet = apiRef.current?.getActiveWorkbook()?.getActiveSheet();
       if (!range || !sheet) return;
@@ -1241,7 +1243,7 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
                 { index: 2, color: "#0b7f59", value: { type: CFValueType.max } },
               ])
               .setRanges([range.getRange()]);
-          } else {
+          } else if (kind === "bar") {
             builder
               .setDataBar({
                 min: { type: CFValueType.min },
@@ -1251,6 +1253,43 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
                 nativeColor: "#d24a3a",
                 isShowValue: true,
               })
+              .setRanges([range.getRange()]);
+          } else if (kind === "icons") {
+            builder
+              .setIconSet({
+                iconConfigs: [
+                  {
+                    iconType: IIconSetType.threeTrafficLights1,
+                    iconId: "0",
+                    operator: CFNumberOperator.greaterThan,
+                    value: { type: CFValueType.percent, value: 67 },
+                  },
+                  {
+                    iconType: IIconSetType.threeTrafficLights1,
+                    iconId: "1",
+                    operator: CFNumberOperator.greaterThan,
+                    value: { type: CFValueType.percent, value: 33 },
+                  },
+                  {
+                    iconType: IIconSetType.threeTrafficLights1,
+                    iconId: "2",
+                    operator: CFNumberOperator.lessThanOrEqual,
+                    value: { type: CFValueType.percent, value: 33 },
+                  },
+                ],
+                isShowValue: true,
+              })
+              .setRanges([range.getRange()]);
+          } else {
+            const expression = (formula ?? "").trim();
+            if (!expression.startsWith("=")) {
+              callbacksRef.current.onError("公式规则要以 = 开头，例如 =A1>0");
+              return;
+            }
+            builder
+              .whenFormulaSatisfied(expression)
+              .setBackground("#fff1b8")
+              .setBold(true)
               .setRanges([range.getRange()]);
           }
           sheet.addConditionalFormattingRule(builder.build());
@@ -2158,6 +2197,16 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
       conditionalRuleCount: () => {
         const sheet = apiRef.current?.getActiveWorkbook()?.getActiveSheet();
         return sheet?.getConditionalFormattingRules().length ?? 0;
+      },
+      applyConditional: (kind, formula) => applyConditional(kind, formula),
+      copyConditionalTo: (path, nextName) => {
+        const book = apiRef.current?.getActiveWorkbook();
+        if (!book) return;
+        const groups = book.getSheets().map((sheet) => ({
+          sheetName: sheet.getSheetName(),
+          rules: sheet.getConditionalFormattingRules(),
+        }));
+        saveCfRules(cfStorageKey(path, nextName), groups);
       },
       validationCount: () => {
         const sheet = apiRef.current?.getActiveWorkbook()?.getActiveSheet();

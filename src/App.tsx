@@ -311,6 +311,10 @@ export default function App() {
         const bytes = await editorRef.current.saveBuffer();
         const size = await writeFileBytes(target, bytes);
         const name = baseName(target);
+        const previous = docRef.current;
+        if (previous && (previous.path !== target || previous.name !== name)) {
+          editorRef.current.copyConditionalTo(target, name);
+        }
         const sheetCount = editorRef.current.sheetCount() || 1;
         setDoc((cur) => (cur ? { ...cur, path: target, name, size, csvRows: null, csvSheetName: undefined } : cur));
         setDirty(false);
@@ -493,6 +497,8 @@ export default function App() {
         editorRef.current?.selectRange(startRow, startColumn, endRow, endColumn),
       selectionA1: () => editorRef.current?.selectionA1() ?? null,
       conditionalRuleCount: () => editorRef.current?.conditionalRuleCount() ?? 0,
+      applyConditional: (kind: "scale" | "bar" | "icons" | "formula" | "clear", formula?: string) =>
+        editorRef.current?.applyConditional(kind, formula),
       validationCount: () => editorRef.current?.validationCount() ?? 0,
       validationForCell: (row: number, column: number) =>
         editorRef.current?.validationForCell(row, column) ?? null,

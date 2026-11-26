@@ -1,0 +1,15 @@
+M4 PRINT UI OK · A4 纵向 · 2 页 · 48+33 行 · 缩放 62%
+M4 LANDSCAPE OK · 4 页 · 缩放 91%
+M4 SCALE OK · 100% · 10 页 · 列带分页均衡
+M4 CHROME OK · 网格 / 页眉 / 页脚均已关闭
+M4 AREA ERROR OK · 非法区域被拦截
+M4 AREA OK · A1:G20 · 1 页 · 19 行
+M4 SELECTION OK · A1:G16 · 1 页 · 设置已持久化
+M4 PRINT MEDIA OK · 210×297mm · zoom=1 · 表格 972/993px
+M4 900 OK · 窗口 880×600 · 纸张 349px · 按钮可见
+M4 PRINT CALL OK · window.print 调用 1 次
+M4 PDF OK · 2 页 · 406066 B
+M4 FILTER PRINT OK · 筛选 20/81 · 只打印可见 20 行
+M4 SHORTCUT OK · Ctrl+P 打开打印
+
+ALL M4 UI CHECKS PASSED
