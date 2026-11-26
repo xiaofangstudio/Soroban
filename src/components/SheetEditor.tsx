@@ -12,8 +12,13 @@ import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
 import UniverPresetSheetsCoreZhCN from "@univerjs/preset-sheets-core/locales/zh-CN";
 import "@univerjs/sheets-numfmt/facade";
 import "@univerjs/sheets-conditional-formatting/facade";
+import "@univerjs/sheets-data-validation/facade";
 import { CFValueType, UniverSheetsConditionalFormattingPlugin } from "@univerjs/sheets-conditional-formatting";
 import { UniverSheetsConditionalFormattingUIPlugin } from "@univerjs/sheets-conditional-formatting-ui";
+import { UniverSheetsDataValidationPlugin } from "@univerjs/sheets-data-validation";
+import { UniverSheetsDataValidationUIPlugin } from "@univerjs/sheets-data-validation-ui";
+import UniverSheetsDataValidationZhCN from "@univerjs/sheets-data-validation/locale/zh-CN";
+import UniverSheetsDataValidationUIZhCN from "@univerjs/sheets-data-validation-ui/locale/zh-CN";
 import type { FUniver } from "@univerjs/presets";
 import type { FRange, FWorkbook, FWorksheet } from "@univerjs/sheets/facade";
 import type { IWorkbookData } from "@univerjs/core";
@@ -38,6 +43,8 @@ import type { ChartData, ChartSpec, ChartType } from "../lib/charts";
 import { ChartCard, ChartStudio } from "./ChartLayer";
 import { CellTools } from "./CellTools";
 import type { CellToolAction, CellToolState } from "./CellTools";
+import { ValidationPanel } from "./ValidationPanel";
+import type { ValidationDraft, ValidationSummary } from "./ValidationPanel";
 import { DataToolbar } from "./DataToolbar";
 import type {
   DataContext,
@@ -62,6 +69,112 @@ import {
 import type { PrintPreview, PrintSettings } from "../lib/print";
 import { columnLabel, shiftFormulaRows, valuesToCsv } from "../lib/data";
 import type { CsvCell } from "../lib/data";
+import {
+  applyValidationRecords,
+  collectValidationRecords,
+  readValidationRecords,
+  writeValidationRecords,
+} from "../lib/validationIO";
+import type { SheetValidationRecords } from "../lib/validationIO";
+import type { FDataValidation } from "@univerjs/sheets-data-validation/facade";
+
+const VALIDATION_TYPE_LABEL: Record<string, string> = {
+  list: "下拉列表",
+  listMultiple: "多选列表",
+  whole: "整数",
+  decimal: "数值",
+  date: "日期",
+  time: "时间",
+  textLength: "文本长度",
+  custom: "自定义公式",
+  checkbox: "复选框",
+  any: "任意值",
+  none: "无",
+};
+
+const VALIDATION_OPERATOR_LABEL: Record<string, string> = {
+  between: "介于",
+  notBetween: "不介于",
+  equal: "等于",
+  notEqual: "不等于",
+  greaterThan: "大于",
+  greaterThanOrEqual: "大于等于",
+  lessThan: "小于",
+  lessThanOrEqual: "小于等于",
+};
+
+function validationListText(raw: string | undefined, separator = " / "): string {
+  let text = (raw ?? "").trim();
+  if (!text) return "";
+  if (text.startsWith("=")) {
+    const ref = text.replace(/^=/, "");
+    return ref;
+  }
+  if (text.startsWith('"') && text.endsWith('"')) text = text.slice(1, -1).replace(/""/g, '"');
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (Array.isArray(parsed)) return parsed.map((item) => String(item)).join(separator);
+  } catch {
+    /* 非 JSON 列表按分隔符处理 */
+  }
+  return text
+    .split(/[,，\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join(separator);
+}
+
+function summarizeValidationRule(rule: FDataValidation): {
+  type: string;
+  detail: string;
+  range: string;
+  kind?: "list" | "between" | "greater" | "less" | "equal";
+  values?: string;
+  min?: string;
+  max?: string;
+  num?: string;
+  integer?: boolean;
+  allowBlank?: boolean;
+  message?: string;
+} {
+  const type = String(rule.getCriteriaType());
+  const [operator, first, second] = rule.getCriteriaValues();
+  let detail = "";
+  let kind: "list" | "between" | "greater" | "less" | "equal" | undefined;
+  let values = "";
+  if (type === "list" || type === "listMultiple") {
+    detail = validationListText(first);
+    values = validationListText(first, ", ");
+    kind = "list";
+  } else if (type === "whole" || type === "decimal" || type === "date" || type === "time") {
+    const op = VALIDATION_OPERATOR_LABEL[operator ?? ""] ?? operator ?? "";
+    detail = [op, first, second].filter((item) => item !== undefined && item !== "").join(" ");
+    if (operator === "between" || operator === "notBetween") kind = "between";
+    else if (operator === "equal" || operator === "notEqual") kind = "equal";
+    else if ((operator ?? "").startsWith("greater")) kind = "greater";
+    else if ((operator ?? "").startsWith("less")) kind = "less";
+  } else if (type === "custom") {
+    detail = first ?? "";
+  }
+  const range = rule
+    .getRanges()
+    .map((item) => item.getA1Notation().replaceAll("$", ""))
+    .join(", ");
+  return {
+    type: VALIDATION_TYPE_LABEL[type] ?? type,
+    detail,
+    range,
+    kind,
+    values,
+    min: first,
+    max: second,
+    num: first,
+    integer: type === "whole",
+    allowBlank: rule.rule.allowBlank !== false,
+    message: rule.rule.error,
+  };
+}
+
 
 export type EditorHandle = {
   saveBuffer: () => Promise<Uint8Array>;
@@ -76,6 +189,9 @@ export type EditorHandle = {
   selectRange: (startRow: number, startColumn: number, endRow: number, endColumn: number) => void;
   selectionA1: () => string | null;
   conditionalRuleCount: () => number;
+  validationCount: () => number;
+  validationForCell: (row: number, column: number) => { type: string; detail: string; range: string } | null;
+  validationStatus: (row: number, column: number) => Promise<string | null>;
   cellStyle: (row: number, column: number) => Record<string, unknown> | null;
   sortBy: (direction: "asc" | "desc", column?: number) => { ok: boolean; message: string };
   sortByKeys: (keys: SortKey[]) => { ok: boolean; message: string };
@@ -497,6 +613,8 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
   const [formatState, setFormatState] = useState<FormatState>(DEFAULT_FORMAT);
   const [cellToolsOpen, setCellToolsOpen] = useState(false);
   const [cellToolState, setCellToolState] = useState<CellToolState>(EMPTY_CELL_TOOLS);
+  const [validationOpen, setValidationOpen] = useState(false);
+  const [validationSummary, setValidationSummary] = useState<ValidationSummary>({ count: 0, current: null });
   const [chartOpen, setChartOpen] = useState(false);
   const [chartType, setChartType] = useState<ChartType>("column");
   const [chartTitle, setChartTitle] = useState("");
@@ -908,6 +1026,113 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
     },
     [activeRange, refreshDataContext, refreshTabs, syncActiveCell],
   );
+
+  const readValidationSummary = useCallback((): ValidationSummary => {
+    const sheet = apiRef.current?.getActiveWorkbook()?.getActiveSheet();
+    const range = sheet?.getSelection()?.getCurrentCell();
+    if (!sheet || !range) return { count: 0, current: null };
+    const rule = sheet.getRange(range.startRow, range.startColumn).getDataValidation();
+    return {
+      count: sheet.getDataValidations().length,
+      current: rule ? summarizeValidationRule(rule) : null,
+    };
+  }, []);
+
+  const openValidation = useCallback(() => {
+    setValidationSummary(readValidationSummary());
+    setValidationOpen(true);
+    setCellToolsOpen(false);
+    setLibraryOpen(false);
+  }, [readValidationSummary]);
+
+  const applyValidation = useCallback(
+    (draft: ValidationDraft): { ok: boolean; message: string } => {
+      const api = apiRef.current;
+      const sheet = apiRef.current?.getActiveWorkbook()?.getActiveSheet();
+      const range = activeRange();
+      if (!api || !sheet || !range) return { ok: false, message: "请先在工作表中选择区域" };
+      const a1 = range.getA1Notation().replaceAll("$", "");
+      try {
+        const builder = api.newDataValidation();
+        if (draft.kind === "list") {
+          if (draft.source === "range") {
+            const ref = draft.range.trim().replaceAll("$", "");
+            if (!ref) return { ok: false, message: "请输入引用区域，例如 K2:K9" };
+            let source: FRange;
+            try {
+              source = sheet.getRange(ref);
+            } catch {
+              return { ok: false, message: `引用区域无效：${ref}` };
+            }
+            if (source.getWidth() * source.getHeight() > 100) {
+              return { ok: false, message: "引用区域最多 100 个单元格" };
+            }
+            if (source.getWidth() > 1 && source.getHeight() > 1) {
+              return { ok: false, message: "请引用单行或单列区域" };
+            }
+            builder.requireValueInRange(source, false, true);
+          } else {
+            const values = draft.values
+              .split(/[,，\n]/)
+              .map((item) => item.trim())
+              .filter(Boolean)
+              .filter((item, index, list) => list.indexOf(item) === index);
+            if (values.length === 0) return { ok: false, message: "请至少输入一个选项" };
+            if (values.length > 100) return { ok: false, message: "下拉选项最多 100 项" };
+            builder.requireValueInList(values, false, true);
+          }
+        } else if (draft.kind === "between") {
+          const min = Number(draft.min);
+          const max = Number(draft.max);
+          if (!draft.min.trim() || !draft.max.trim() || !Number.isFinite(min) || !Number.isFinite(max)) {
+            return { ok: false, message: "请输入有效的最小值和最大值" };
+          }
+          if (min > max) return { ok: false, message: "最小值不能大于最大值" };
+          builder.requireNumberBetween(min, max, draft.integer);
+        } else {
+          const num = Number(draft.num);
+          if (!draft.num.trim() || !Number.isFinite(num)) return { ok: false, message: "请输入有效数值" };
+          if (draft.kind === "greater") builder.requireNumberGreaterThan(num, draft.integer);
+          else if (draft.kind === "less") builder.requireNumberLessThan(num, draft.integer);
+          else builder.requireNumberEqualTo(num, draft.integer);
+        }
+        const message =
+          draft.message.trim() ||
+          (draft.kind === "list" ? "请从下拉列表中选择一个选项" : "输入值不符合此单元格的验证规则");
+        const rule = builder
+          .setAllowBlank(draft.allowBlank)
+          .setOptions({
+            showErrorMessage: true,
+            error: message,
+          })
+          .build();
+        range.setDataValidation(rule);
+        callbacksRef.current.onDirty();
+        callbacksRef.current.onInfo(`已为 ${a1} 设置数据验证`);
+        setValidationSummary(readValidationSummary());
+        return { ok: true, message: `已应用：${a1}` };
+      } catch (err) {
+        return { ok: false, message: err instanceof Error ? err.message : String(err) };
+      }
+    },
+    [activeRange, readValidationSummary],
+  );
+
+  const clearValidation = useCallback((): { ok: boolean; message: string } => {
+    const sheet = apiRef.current?.getActiveWorkbook()?.getActiveSheet();
+    const range = activeRange();
+    if (!sheet || !range) return { ok: false, message: "请先在工作表中选择区域" };
+    const a1 = range.getA1Notation().replaceAll("$", "");
+    try {
+      range.setDataValidation(null);
+      callbacksRef.current.onDirty();
+      callbacksRef.current.onInfo(`已清除 ${a1} 的数据验证`);
+      setValidationSummary(readValidationSummary());
+      return { ok: true, message: `已清除：${a1}` };
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : String(err) };
+    }
+  }, [activeRange, readValidationSummary]);
 
   const applyConditional = useCallback(
     (kind: "scale" | "bar" | "clear") => {
@@ -1811,7 +2036,9 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
           syncActiveCell();
         }
         const snapshot = book.save();
-        return snapshotToXlsx(snapshot);
+        const buffer = await snapshotToXlsx(snapshot);
+        const records = collectValidationRecords(book);
+        return records.length > 0 ? writeValidationRecords(buffer, records) : buffer;
       },
       isEditing: () => editingRef.current,
       openFind,
@@ -1851,6 +2078,21 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
       conditionalRuleCount: () => {
         const sheet = apiRef.current?.getActiveWorkbook()?.getActiveSheet();
         return sheet?.getConditionalFormattingRules().length ?? 0;
+      },
+      validationCount: () => {
+        const sheet = apiRef.current?.getActiveWorkbook()?.getActiveSheet();
+        return sheet?.getDataValidations().length ?? 0;
+      },
+      validationForCell: (row, column) => {
+        const sheet = apiRef.current?.getActiveWorkbook()?.getActiveSheet();
+        const rule = sheet?.getRange(row, column).getDataValidation();
+        return rule ? summarizeValidationRule(rule) : null;
+      },
+      validationStatus: async (row, column) => {
+        const sheet = apiRef.current?.getActiveWorkbook()?.getActiveSheet();
+        if (!sheet) return null;
+        const matrix = await sheet.getRange(row, column).getValidatorStatus();
+        return matrix[0]?.[0] ?? null;
       },
       cellStyle: (row, column) => {
         const sheet = apiRef.current?.getActiveWorkbook()?.getActiveSheet();
@@ -1957,7 +2199,7 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
     const { univer, univerAPI } = createUniver({
       locale: LocaleType.ZH_CN,
       locales: {
-        [LocaleType.ZH_CN]: mergeLocales(UniverPresetSheetsCoreZhCN),
+        [LocaleType.ZH_CN]: mergeLocales(UniverPresetSheetsCoreZhCN, UniverSheetsDataValidationZhCN, UniverSheetsDataValidationUIZhCN),
       },
       presets: [
         UniverSheetsCorePreset({
@@ -1969,18 +2211,36 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
           contextMenu: true,
         }),
       ],
-      plugins: [UniverSheetsConditionalFormattingPlugin, UniverSheetsConditionalFormattingUIPlugin],
+      plugins: [
+        UniverSheetsConditionalFormattingPlugin,
+        UniverSheetsConditionalFormattingUIPlugin,
+        UniverSheetsDataValidationPlugin,
+        UniverSheetsDataValidationUIPlugin,
+      ],
     });
     apiRef.current = univerAPI;
 
     const boot = async () => {
       let snapshot: IWorkbookData | undefined;
+      let validationRecords: SheetValidationRecords[] = [];
       if (bytes) {
         snapshot = await xlsxToSnapshot(bytes, name);
+        try {
+          validationRecords = await readValidationRecords(bytes);
+        } catch {
+          validationRecords = [];
+        }
       }
       if (disposed) return;
       const book = univerAPI.createWorkbook(snapshot ?? {});
       bookRef.current = book;
+      if (validationRecords.length > 0) {
+        try {
+          applyValidationRecords(univerAPI, book, validationRecords);
+        } catch (err) {
+          callbacksRef.current.onError(err instanceof Error ? err.message : String(err));
+        }
+      }
       // 旧文件 / 桥接导入可能把整张已用区域写成活动选区，Univer 会为首屏绘制整块选区。
       // 只收敛异常的大选区；普通文件的 A1 / 小选区保持原样，避免合并单元格被改选到下一行。
       for (const sheet of book.getSheets()) {
@@ -2149,6 +2409,26 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
     };
   }, [cellToolsOpen]);
 
+  useEffect(() => {
+    if (!validationOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && (target.closest(".dv-panel") || target.closest(".dv-mark"))) {
+        return;
+      }
+      setValidationOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setValidationOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [validationOpen]);
+
   return (
     <div className="sheet-host">
       <FormatToolbar
@@ -2215,6 +2495,7 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
           onClick={() => {
             setCellToolsOpen((open) => !open);
             setLibraryOpen(false);
+            setValidationOpen(false);
           }}
           title="单元格工具：合并、边框、换行、行列"
           aria-label="单元格工具"
@@ -2224,6 +2505,22 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
             <path d="M6 2v12M10 2v12M2 6h12M2 10h12" stroke="currentColor" strokeWidth="0.8" opacity=".55" />
             <circle cx="13.5" cy="13.5" r="2.4" fill="#fff" stroke="currentColor" strokeWidth="1" />
             <path d="M13.5 12.2v2.6M12.2 13.5h2.6" stroke="currentColor" strokeWidth="0.9" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className={`dv-mark${validationOpen ? " active" : ""}`}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            if (validationOpen) setValidationOpen(false);
+            else openValidation();
+          }}
+          title="数据验证：下拉列表、数值范围"
+          aria-label="数据验证"
+        >
+          <svg viewBox="0 0 16 16" aria-hidden>
+            <path d="M8 1.9 13 3.8v4.3c0 3-2 5.1-5 6.1-3-1-5-3.1-5-6.1V3.8L8 1.9Z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+            <path d="m5.9 8 1.5 1.5 2.9-3" stroke="currentColor" strokeWidth="1.3" fill="none" />
           </svg>
         </button>
         <input
@@ -2342,6 +2639,15 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
             rangeA1={activeRange()?.getA1Notation() ?? activeAddr}
             onAction={applyCellTool}
             onClose={() => setCellToolsOpen(false)}
+          />
+        ) : null}
+        {validationOpen ? (
+          <ValidationPanel
+            rangeA1={activeRange()?.getA1Notation() ?? activeAddr}
+            summary={validationSummary}
+            onApply={applyValidation}
+            onClear={clearValidation}
+            onClose={() => setValidationOpen(false)}
           />
         ) : null}
       </div>

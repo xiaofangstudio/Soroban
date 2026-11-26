@@ -1,0 +1,161 @@
+mcp-stderr: [soroban-mcp] stdio server ready
+init { name: 'soroban', title: 'Soroban 表格工作台', version: '0.8.0' } { tools: { listChanged: false } }
+tools [
+  'soroban_workbook_info',
+  'soroban_validate_xlsx',
+  'soroban_csv_preview',
+  'soroban_formula_search'
+]
+info {
+  "bytes": 8577,
+  "entryCount": 17,
+  "hasSharedStrings": true,
+  "hasStyles": true,
+  "name": "M0-样本.xlsx",
+  "path": "D:\\20533\\deskbox\\fangwork\\Papyra\\Soroban\\assets\\M0-样本.xlsx",
+  "sheetCount": 2,
+  "sheets": [
+    "销售",
+    "明细"
+  ]
+}
+validate {
+  "issues": [],
+  "ok": true,
+  "sheetCount": 2,
+  "sheets": [
+    "销售",
+    "明细"
+  ]
+}
+csv {
+  "columns": 4,
+  "delimiter": ",",
+  "headers": [
+    "月份",
+    "销售额",
+    "成本",
+    "备注"
+  ],
+  "path": "D:\\20533\\deskbox\\fangwork\\Papyra\\Soroban\\assets\\M0-样本.csv",
+  "preview": [
+    [
+      "10 月",
+      "128000",
+      "74000",
+      "老客户续约"
+    ],
+    [
+      "11 月",
+      "156400",
+      "88200",
+      "新增两家渠道"
+    ],
+    [
+      "12 月",
+      "189300",
+      "101500",
+      "年末冲刺"
+    ]
+  ],
+  "rows": 3,
+  "truncated": false
+}
+formula {
+  "formulas": [
+    {
+      "common": true,
+      "description": "将单个值、单元格引用或是区域相加，或者将三者的组合相加。",
+      "name": "SUM",
+      "parameters": [
+        "数值 1",
+        "数值 2"
+      ],
+      "signature": "SUM(数值 1, 数值 2)"
+    },
+    {
+      "common": true,
+      "description": "对范围中符合指定条件的值求和。",
+      "name": "SUMIF",
+      "parameters": [
+        "范围",
+        "条件",
+        "求和范围"
+      ],
+      "signature": "SUMIF(范围, 条件, 求和范围)"
+    },
+    {
+      "common": true,
+      "description": "用于计算其满足多个条件的全部参数的总量。",
+      "name": "SUMIFS",
+      "parameters": [
+        "求和范围",
+        "条件范围 1",
+        "条件 1",
+        "条件范围 2",
+        "条件 2"
+      ],
+      "signature": "SUMIFS(求和范围, 条件范围 1, 条件 1, 条件范围 2, …)"
+    },
+    {
+      "common": true,
+      "description": "返回对应的数组元素的乘积和",
+      "name": "SUMPRODUCT",
+      "parameters": [
+        "数组",
+        "数组"
+      ],
+      "signature": "SUMPRODUCT(数组, 数组)"
+    },
+    {
+      "common": false,
+      "description": "在列表或数据库中，DSUM 提供字段 (列) 与指定条件匹配的记录中的数字之和。",
+      "name": "DSUM",
+      "parameters": [
+        "数据库",
+        "字段",
+        "条件"
+      ],
+      "signature": "DSUM(数据库, 字段, 条件)"
+    },
+    {
+      "common": false,
+      "description": "返回多个复数的和",
+      "name": "IMSUM",
+      "parameters": [
+        "复数1",
+        "复数2"
+      ],
+      "signature": "IMSUM(复数1, 复数2)"
+    },
+    {
+      "common": false,
+      "description": "返回基于公式的幂级数的和",
+      "name": "SERIESSUM",
+      "parameters": [
+        "x",
+        "n",
+        "m",
+        "系数"
+      ],
+      "signature": "SERIESSUM(x, n, m, 系数)"
+    },
+    {
+      "common": false,
+      "description": "返回参数的平方和",
+      "name": "SUMSQ",
+      "parameters": [
+        "数值1",
+        "数值2"
+      ],
+      "signature": "SUMSQ(数值1, 数值2)"
+    }
+  ],
+  "matched": 11,
+  "query": "SUM",
+  "total": 528
+}
+formula-date TODAY,NOW,DATE,YEAR,MONTH
+mcp-stderr: [soroban-mcp] bye
+mcp-exit 0
+MCP M1 OK

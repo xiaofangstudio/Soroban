@@ -493,6 +493,11 @@ export default function App() {
         editorRef.current?.selectRange(startRow, startColumn, endRow, endColumn),
       selectionA1: () => editorRef.current?.selectionA1() ?? null,
       conditionalRuleCount: () => editorRef.current?.conditionalRuleCount() ?? 0,
+      validationCount: () => editorRef.current?.validationCount() ?? 0,
+      validationForCell: (row: number, column: number) =>
+        editorRef.current?.validationForCell(row, column) ?? null,
+      validationStatus: (row: number, column: number) =>
+        editorRef.current?.validationStatus(row, column) ?? Promise.resolve(null),
       cellStyle: (row: number, column: number) => editorRef.current?.cellStyle(row, column) ?? null,
       sortBy: (direction: "asc" | "desc", column?: number) =>
         editorRef.current?.sortBy(direction, column) ?? { ok: false, message: "尚未就绪" },

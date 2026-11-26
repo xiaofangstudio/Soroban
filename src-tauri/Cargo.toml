@@ -1,6 +1,6 @@
 [package]
 name = "soroban"
-version = "0.7.0"
+version = "0.8.0"
 description = "Soroban - 小方工作室表格工作台"
 authors = ["小方工作室"]
 edition = "2021"
@@ -27,3 +27,4 @@ lto = true
 opt-level = "s"
 panic = "abort"
 strip = true
+

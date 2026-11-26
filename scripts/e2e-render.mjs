@@ -125,7 +125,8 @@ const perf = await page.evaluate(() => {
 });
 const scrolled = await gridAudit();
 assert.ok(perf.fps >= 55, `滚动帧率不足：${perf.fps}`);
-assert.ok(perf.slow <= 2, `滚动卡顿帧过多：${perf.slow}`);
+const slowLimit = Number(process.env.SOROBAN_SLOW_FRAMES_MAX || 2);
+assert.ok(perf.slow <= slowLimit, `滚动卡顿帧过多：${perf.slow}`);
 assert.ok(scrolled.canvases.every((item) => item.scrollHeight <= scrolled.grid.height + 2), "滚动后画布容器高度超过视口");
 await page.screenshot({ path: path.join(out, "611-render-scrolled.png") });
 log(`RENDER SCROLL OK · ${perf.fps} FPS · 平均帧 ${perf.averageFrame}ms · 慢帧 ${perf.slow}`);

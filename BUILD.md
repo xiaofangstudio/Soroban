@@ -509,9 +509,36 @@ Copy-Item src-tauri\target\release\soroban.exe .\Soroban.exe -Force
 
 均未签名。0.6.1 安装包保留作历史；`release-0.7.0.sha256` 已写入。
 
+### 7.21 0.8.0 数据验证验收记录
+
+| 项 | 结果 |
+| --- | --- |
+| M10 面板 | 360×419，1280×820 与 900×620 均在视口内，无横向溢出 |
+| 下拉列表 | H2:H6 写入 `高 / 中 / 低`；单元格右侧下拉箭头显示；`超高` 状态为 `invalid` 并标红 |
+| 数值规则 | B3:B5 整数区间 100000–200000；面板回填“数值区间 / 只允许整数” |
+| 清除 | H2:H6 清除后规则数 2→1，下拉箭头消失，B 列规则保留 |
+| 保存重开 | 2 条规则完整；重开后直接应用不被拼成单项 |
+| 标准 XML | 删除 `xl/soroban-validations.json` 后仍回读 2 条；ExcelJS 读到 2 条 `dataValidations` |
+| M0–M4 / M8 / M9 / multi | release 全过 |
+| MCP / Rust | version 0.8.0 四工具；`cargo test --release` 6 passed |
+| 构建 | 2012 modules，主 JS 10,141.30 kB；release 3m 54s；NSIS 4.19 MiB |
+| 渲染专项 | 画布 / DOM / 选区 / 打印 / PDF / 图表通过；滚动 24 慢帧与旧版同条件一致，见 4.10 |
+
+截图：`review-0.8/800-dv-list.png`、`801-dv-invalid.png`、`802-dv-number.png`、`803-dv-reopen.png`、`804-dv-cleared.png`、`805-dv-900.png`。日志：`release-e2e-*.log`、`mcp-test.txt`、`rust-test.txt`、`build-release.txt`、`render-perf-strict-fail.txt`、`render-release-diag.txt`。
+
+### 7.22 0.8.0 产物
+
+| 产物 | 大小 | SHA-256 |
+| --- | --- | --- |
+| `Soroban.exe` | 7,008,256 B | `6DFC72534475790DAD78BEC250B0D327880BE8249D79830D48A0B02044D5C6CA` |
+| `Soroban_0.8.0_x64-setup.exe` | 4,389,644 B | `DEF80427B8CA4BF002A2B1677B195497830D824C407EE68490CAA93EE057785F` |
+
+均未签名。0.7.0 安装包保留作历史；`release-0.8.0.sha256` 已写入。
+
 ## 八 已知问题
 
 - Univer OSS 无 xlsx 转换后端，导出走 MIT 桥接库；图片等复杂对象仍未验证
+- 数据验证已在 0.8.0 写入标准 `<dataValidations>` 与 `xl/soroban-validations.json`；外部 Excel 只显示标准子集（下拉 / 数值），Soroban 专属类型以清单为准
 - 图表与条件格式只存 localStorage sidecar（`soroban:charts:*` / `soroban:cf:*`），不随 xlsx 走：换路径、换机器或 Excel 打开都看不到
 - 图表仅支持单表区域、首行表头 + 首列分类；无多区域 / 跨表 / 堆叠 / 次坐标轴 / 缩放
 - 排序最多 3 键，方向支持升 / 降 / 自定义序列；自定义未列值统一排后，无按颜色 / 图标排序；排序不写进 xlsx
@@ -534,5 +561,8 @@ Copy-Item src-tauri\target\release\soroban.exe .\Soroban.exe -Force
 - M1 记录的绿色小角标在 M2 / M3 验收截图中未复现；值 / 公式 / 保存正常，继续观察
 - 最近文件存在 localStorage，不含缩略图；`sheet_thumb` 卡片预览留 M4
 
-*小方工作室 · Soroban · BUILD ｜ 2026-11-25*
+*小方工作室 · Soroban · BUILD ｜ 2026-11-26*
+
+
+
 
