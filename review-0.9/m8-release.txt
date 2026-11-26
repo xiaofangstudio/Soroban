@@ -1,0 +1,18 @@
+M8 FIND OK · 查找 / 上下步进 / 单次替换 / 全部替换
+M8 CUSTOM SORT OK · 待发货 → 已完成 → 进行中
+M8 TAB COLOR OK · 订单 → #2f80ed
+M8 CSV PREVIEW OK · UTF-8 / 逗号 / 标题开关 / 导入 4 行 7 列
+M8 AUTOSAVE OK · H1 已写入 / dirty=false / 文件已落盘
+M8 Layout 900 OK · 查找面板 / CSV 弹窗均在 900×620 内
+{
+  found: 7,
+  replaced: 0,
+  sorted: [ '待发货', '待发货', '待发货', '已完成' ],
+  tabColor: '#2f80ed',
+  csvName: 'M3-订单.xlsx',
+  csvCells: [ '订单号', 128000 ],
+  autoSaved: { saved: true, size: 9751 },
+  findRect: { x: 538, y: 154, right: 882, bottom: 349, width: 344 },
+  csvRect: { x: 70, y: 98.5, right: 830, bottom: 521.5, width: 760 }
+}
+ALL 0.6.0 CHECKS PASSED

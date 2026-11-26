@@ -45,6 +45,10 @@ import { CellTools } from "./CellTools";
 import type { CellToolAction, CellToolState } from "./CellTools";
 import { ValidationPanel } from "./ValidationPanel";
 import type { ValidationDraft, ValidationSummary } from "./ValidationPanel";
+import { PivotPanel } from "./PivotPanel";
+import type { PivotSource } from "./PivotPanel";
+import { buildPivot, PIVOT_AGGREGATE_LABEL } from "../lib/pivot";
+import type { PivotSpec } from "../lib/pivot";
 import { DataToolbar } from "./DataToolbar";
 import type {
   DataContext,
@@ -192,6 +196,7 @@ export type EditorHandle = {
   validationCount: () => number;
   validationForCell: (row: number, column: number) => { type: string; detail: string; range: string } | null;
   validationStatus: (row: number, column: number) => Promise<string | null>;
+  openPivot: () => boolean;
   cellStyle: (row: number, column: number) => Record<string, unknown> | null;
   sortBy: (direction: "asc" | "desc", column?: number) => { ok: boolean; message: string };
   sortByKeys: (keys: SortKey[]) => { ok: boolean; message: string };
@@ -615,6 +620,8 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
   const [cellToolState, setCellToolState] = useState<CellToolState>(EMPTY_CELL_TOOLS);
   const [validationOpen, setValidationOpen] = useState(false);
   const [validationSummary, setValidationSummary] = useState<ValidationSummary>({ count: 0, current: null });
+  const [pivotOpen, setPivotOpen] = useState(false);
+  const [pivotSource, setPivotSource] = useState<PivotSource | null>(null);
   const [chartOpen, setChartOpen] = useState(false);
   const [chartType, setChartType] = useState<ChartType>("column");
   const [chartTitle, setChartTitle] = useState("");
@@ -832,6 +839,79 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
       refreshTabs();
     }, 120);
   };
+
+  const openPivot = useCallback(() => {
+    const sheet = apiRef.current?.getActiveWorkbook()?.getActiveSheet();
+    const range = selectedDataRange();
+    if (!sheet || !range) {
+      callbacksRef.current.onError("请先选中要汇总的数据区域。");
+      return false;
+    }
+    try {
+      const values = range.getValues() as unknown[][];
+      setPivotSource({
+        rangeA1: range.getA1Notation(),
+        values,
+        hasHeader: detectHeaderRow(values.slice(0, 2)),
+      });
+      setPivotOpen(true);
+      return true;
+    } catch (reason) {
+      callbacksRef.current.onError(String(reason));
+      return false;
+    }
+  }, [selectedDataRange]);
+
+  const applyPivot = useCallback(
+    (spec: PivotSpec): string | null => {
+      const book = apiRef.current?.getActiveWorkbook();
+      if (!book || !pivotSource) return "表格尚未准备好。";
+      const result = buildPivot(pivotSource.values, spec);
+      if (result.sourceRows === 0) return "当前区域没有可汇总的数据行。";
+      if (result.rows.length === 0) return "没有可用的行分组。";
+
+      clearFilterInternal(true);
+      const existing = new Set(book.getSheets().map((sheet) => sheet.getSheetName()));
+      let index = 1;
+      while (existing.has(`透视${index}`)) index += 1;
+      const outputName = `透视${index}`;
+      const output = book.create(outputName, Math.max(40, result.matrix.length + 4), Math.max(10, result.matrix[0].length));
+      const columns = Math.max(2, ...result.matrix.map((row) => row.length));
+      output.getRange(0, 0, result.matrix.length, columns).setValues(result.matrix as unknown as object[][]);
+      const title = output.getRange(0, 0, 1, columns);
+      title.setFontWeight("bold");
+      title.setFontSize(16);
+      title.setFontColor("#14532d");
+      const meta = output.getRange(1, 0, 1, columns);
+      meta.setFontSize(11);
+      meta.setFontColor("#6b7280");
+      const head = output.getRange(2, 0, 1, columns);
+      head.setFontWeight("bold");
+      head.setBackgroundColor("#e7f3ec");
+      head.setFontColor("#14532d");
+      const body = output.getRange(3, 0, Math.max(1, result.rows.length), columns);
+      body.setHorizontalAlignment(result.columnKeys.length > 0 ? "center" : "normal");
+      const total = output.getRange(result.matrix.length - 1, 0, 1, columns);
+      total.setFontWeight("bold");
+      total.setBackgroundColor("#f3f7f5");
+      for (let columnIndex = 0; columnIndex < columns; columnIndex += 1) {
+        output.setColumnWidth(columnIndex, columnIndex === 0 ? 180 : 118);
+      }
+      output.activate();
+      callbacksRef.current.onDirty();
+      callbacksRef.current.onInfo(
+        `已生成 ${outputName}：${PIVOT_AGGREGATE_LABEL[spec.aggregate]} · ${result.sourceRows} 行`,
+      );
+      setPivotOpen(false);
+      window.setTimeout(() => {
+        syncActiveCell();
+        refreshTabs();
+        refreshDataContext();
+      }, 120);
+      return null;
+    },
+    [clearFilterInternal, pivotSource, refreshDataContext, refreshTabs, syncActiveCell],
+  );
 
   const activeRange = useCallback((): FRange | null => {
     const sheet = apiRef.current?.getActiveWorkbook()?.getActiveSheet();
@@ -2094,6 +2174,7 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
         const matrix = await sheet.getRange(row, column).getValidatorStatus();
         return matrix[0]?.[0] ?? null;
       },
+      openPivot,
       cellStyle: (row, column) => {
         const sheet = apiRef.current?.getActiveWorkbook()?.getActiveSheet();
         return (sheet?.getRange(row, column).getCellStyleData() as unknown as Record<string, unknown>) ?? null;
@@ -2152,6 +2233,7 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
       findQuery,
       hiddenRows,
       openFind,
+      openPivot,
       openPrint,
       printOpen,
       printPreview,
@@ -2455,6 +2537,7 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
         onDuplicateSheet={duplicateSheet}
         onDeleteSheet={deleteSheet}
         onAddSheet={addSheet}
+        onPivot={openPivot}
       />
       <div className={`formula-bar${formulaEditing ? " editing" : ""}`}>
         <span className="name-box" title="当前单元格">
@@ -2650,6 +2733,11 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
             onClose={() => setValidationOpen(false)}
           />
         ) : null}
+        <PivotPanel
+          source={pivotOpen ? pivotSource : null}
+          onClose={() => setPivotOpen(false)}
+          onApply={applyPivot}
+        />
       </div>
       <div className="sheet-grid" ref={gridRef}>
         <div className="univer-host sheet-container" ref={hostRef} />

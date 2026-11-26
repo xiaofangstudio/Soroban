@@ -535,10 +535,35 @@ Copy-Item src-tauri\target\release\soroban.exe .\Soroban.exe -Force
 
 均未签名。0.7.0 安装包保留作历史；`release-0.8.0.sha256` 已写入。
 
+### 7.23 0.9.0 数据透视验收记录
+
+| 项 | 结果 |
+| --- | --- |
+| 平均值 | 客户 × 状态 × 金额：方岛 27750、康岛 40000/22500、南山 38250/12000、前海 33000/33000、深圳湾 26000/43500；总计 31250 |
+| 计数 | 同维度：行总计 2/2/3/3/2，列小计 8/4，总计 12 |
+| 保存重开 | `M11-数据透视.xlsx` 四表；重开点击 `透视2`，9 行计数表完整，active=透视2，dirty=false |
+| 面板 1280 | 360×340（x=904、y=112），scroll=client=339 |
+| 面板 900 | 330×340（x=560、y=104），数据状态文字隐藏，无越界 |
+| M0–M4 / M8–M10 / multi | release 全过 |
+| MCP / Rust | version 0.9.0 四工具；`cargo test --release` 6 passed |
+| 构建 | 1926 modules，主 JS 10,264.62 kB；release 4m 52s；NSIS 4.19 MiB |
+
+截图：`review-0.9/900-pivot-panel.png`、`901-pivot-average.png`、`902-pivot-count.png`、`903-pivot-reopen.png`、`904-pivot-900.png`。日志：`m11-release.txt`、`m0-release.txt`、`m1-release.txt`、`m2-release.txt`、`m3-release.txt`、`m4-release.txt`、`m8-release.txt`、`m9-release.txt`、`m10-release.txt`、`multi-release.txt`、`mcp-test.txt`、`rust-test-release.txt`、`build-release.log`。
+
+### 7.24 0.9.0 产物
+
+| 产物 | 大小 | SHA-256 |
+| --- | --- | --- |
+| `Soroban.exe` | 7,011,328 B | `20D603CCD8B434D770C3923633FAEDBD3B78B8616162FD65622363572DC32CE9` |
+| `Soroban_0.9.0_x64-setup.exe` | 4,392,178 B | `FA8FEE2F0FFB83ADEC827CBCE2AD919162F9A6E1E04D7533D01FC33569CC8A12` |
+
+均未签名。0.8.0 安装包保留作历史；`release-0.9.0.sha256` 已写入。
+
 ## 八 已知问题
 
 - Univer OSS 无 xlsx 转换后端，导出走 MIT 桥接库；图片等复杂对象仍未验证
 - 数据验证已在 0.8.0 写入标准 `<dataValidations>` 与 `xl/soroban-validations.json`；外部 Excel 只显示标准子集（下拉 / 数值），Soroban 专属类型以清单为准
+- 数据透视 0.9.0 是一次性静态汇总：单行字段 + 单列字段 + 单值字段，不写 Excel 原生 PivotTable，不自动刷新，无字段拖拽 / 切片器 / Top N / 日期分组
 - 图表与条件格式只存 localStorage sidecar（`soroban:charts:*` / `soroban:cf:*`），不随 xlsx 走：换路径、换机器或 Excel 打开都看不到
 - 图表仅支持单表区域、首行表头 + 首列分类；无多区域 / 跨表 / 堆叠 / 次坐标轴 / 缩放
 - 排序最多 3 键，方向支持升 / 降 / 自定义序列；自定义未列值统一排后，无按颜色 / 图标排序；排序不写进 xlsx

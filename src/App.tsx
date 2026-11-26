@@ -498,6 +498,7 @@ export default function App() {
         editorRef.current?.validationForCell(row, column) ?? null,
       validationStatus: (row: number, column: number) =>
         editorRef.current?.validationStatus(row, column) ?? Promise.resolve(null),
+      openPivot: () => editorRef.current?.openPivot() ?? false,
       cellStyle: (row: number, column: number) => editorRef.current?.cellStyle(row, column) ?? null,
       sortBy: (direction: "asc" | "desc", column?: number) =>
         editorRef.current?.sortBy(direction, column) ?? { ok: false, message: "尚未就绪" },

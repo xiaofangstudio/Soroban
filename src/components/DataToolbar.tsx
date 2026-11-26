@@ -54,6 +54,7 @@ type Props = {
   onDuplicateSheet: () => void;
   onDeleteSheet: () => void;
   onAddSheet: () => void;
+  onPivot: () => void;
 };
 
 const OPERATORS: { value: FilterOperator; label: string }[] = [
@@ -93,6 +94,16 @@ function FreezeIcon() {
   );
 }
 
+function PivotIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden>
+      <rect x="2" y="2.5" width="12" height="11" rx="1.2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M2 6.5h12M6.5 6.5v7M6.5 2.5v4" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M10 9.2v2.6M8.8 10.5h2.4" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
+  );
+}
+
 function SheetIcon() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden>
@@ -120,6 +131,7 @@ export function DataToolbar({
   onDuplicateSheet,
   onDeleteSheet,
   onAddSheet,
+  onPivot,
 }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<"sort" | "filter" | "freeze" | "sheets" | null>(null);
@@ -480,6 +492,13 @@ export function DataToolbar({
         ) : null}
       </div>
 
+      <div className="data-anchor">
+        <button className="data-btn" onClick={onPivot} title="按行列维度汇总当前数据区域">
+          <PivotIcon />
+          透视
+        </button>
+      </div>
+
       <div className="data-status" title={context.rangeA1}>
         {freeze ? `${freeze.rows} 行 ${freeze.columns} 列冻结` : context.rangeA1}
         {!freeze && context.currentLabel ? ` · ${context.currentLabel}` : ""}
@@ -582,3 +601,4 @@ export function DataToolbar({
     </div>
   );
 }
+
