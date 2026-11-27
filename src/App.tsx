@@ -15,6 +15,7 @@ import {
   type RecentFile,
 } from "./lib/recents";
 import { fileExists, fileSize, readFileBytes, writeFileBytes } from "./lib/tauri";
+import { embedWorkbookMeta, hydrateWorkbookMeta, readWorkbookMeta } from "./lib/workbookMeta";
 import { csvRowsToCellValues, decodeCsvBytes, guessCsvEncoding } from "./lib/data";
 import type { CsvCell, CsvDelimiter, CsvEncoding } from "./lib/data";
 
@@ -149,6 +150,8 @@ export default function App() {
         if (size > 80 * 1024 * 1024) throw new Error("文件超过 80MB，M0 暂不打开");
         const bytes = await readFileBytes(path);
         const name = baseName(path);
+        const meta = await readWorkbookMeta(bytes);
+        if (meta) hydrateWorkbookMeta(path, name, meta);
         setDoc({ key: `open-${Date.now()}`, path, name, bytes, size, csvRows: null });
         setDirty(false);
         setCanUndo(false);
@@ -308,9 +311,12 @@ export default function App() {
       setStatusText("正在生成 xlsx…");
       setStatusKind("busy");
       try {
-        const bytes = await editorRef.current.saveBuffer();
+        const meta = editorRef.current.workbookMeta();
+        const buffer = await editorRef.current.saveBuffer();
+        const bytes = await embedWorkbookMeta(buffer, meta, docRef.current?.bytes ?? undefined);
         const size = await writeFileBytes(target, bytes);
         const name = baseName(target);
+        hydrateWorkbookMeta(target, name, meta);
         const previous = docRef.current;
         if (previous && (previous.path !== target || previous.name !== name)) {
           editorRef.current.copyConditionalTo(target, name);
@@ -321,7 +327,7 @@ export default function App() {
         setRecent(rememberRecent({ path: target, name, sheets: sheetCount, size }));
         setStatusText("已保存到本机");
         setStatusKind("ok");
-        notify(`已保存 ${name} · ${formatBytes(size)}`);
+        notify(`已保存 ${name} · ${formatBytes(size)} · 图表与条件格式已写入 xlsx`);
         return { size, bytes: bytes.length };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -365,8 +371,11 @@ export default function App() {
     setStatusText("正在自动保存…");
     setStatusKind("busy");
     try {
-      const bytes = await editorRef.current.saveBuffer();
+      const meta = editorRef.current.workbookMeta();
+      const buffer = await editorRef.current.saveBuffer();
+      const bytes = await embedWorkbookMeta(buffer, meta, current.bytes ?? undefined);
       const size = await writeFileBytes(current.path, bytes);
+      hydrateWorkbookMeta(current.path, current.name, meta);
       const sheetCount = editorRef.current.sheetCount() || 1;
       setDirty(false);
       setRecent(rememberRecent({ path: current.path, name: current.name, sheets: sheetCount, size }));

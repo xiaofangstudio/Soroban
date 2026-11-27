@@ -25,9 +25,14 @@ fn write_document(path: String, data: Vec<u8>) -> Result<u64, String> {
             return Err("目标文件夹不存在".into());
         }
     }
-    let temp = p.with_extension("soroban-tmp");
+    let file_name = p
+        .file_name()
+        .ok_or_else(|| "保存路径没有文件名".to_string())?
+        .to_string_lossy();
+    // 用通用 .tmp / .bak，不把产品名塞进临时文件后缀。
+    let temp = p.with_file_name(format!("{file_name}.tmp"));
     std::fs::write(&temp, &data).map_err(|e| format!("写入临时文件失败：{e}"))?;
-    let backup = p.with_extension("soroban-bak");
+    let backup = p.with_file_name(format!("{file_name}.bak"));
     let had_original = p.exists();
     if had_original {
         std::fs::rename(&p, &backup).map_err(|e| {
@@ -75,3 +80,28 @@ pub fn run() {
 }
 
 pub mod mcp;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn write_document_uses_generic_tmp_and_bak() {
+        let dir = std::env::temp_dir().join(format!("soroban-test-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let target = dir.join("表.xlsx");
+        std::fs::write(&target, b"old").unwrap();
+
+        let size = write_document(target.to_string_lossy().into_owned(), b"new".to_vec()).unwrap();
+        assert_eq!(size, 3);
+        assert_eq!(std::fs::read(&target).unwrap(), b"new");
+        assert!(!dir.join("表.xlsx.tmp").exists());
+        assert!(!dir.join("表.xlsx.bak").exists());
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let name = entry.unwrap().file_name().to_string_lossy().into_owned();
+            assert!(!name.contains("soroban"), "临时目录不应出现产品名后缀：{name}");
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

@@ -81,6 +81,7 @@ import {
 } from "../lib/validationIO";
 import type { SheetValidationRecords } from "../lib/validationIO";
 import type { FDataValidation } from "@univerjs/sheets-data-validation/facade";
+import type { WorkbookMeta } from "../lib/workbookMeta";
 
 const VALIDATION_TYPE_LABEL: Record<string, string> = {
   list: "下拉列表",
@@ -182,6 +183,7 @@ function summarizeValidationRule(rule: FDataValidation): {
 
 export type EditorHandle = {
   saveBuffer: () => Promise<Uint8Array>;
+  workbookMeta: () => WorkbookMeta;
   isEditing: () => boolean;
   openFind: (replace?: boolean) => void;
   findState: () => { open: boolean; query: string; matches: number; index: number };
@@ -2159,6 +2161,16 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
         const records = collectValidationRecords(book);
         return records.length > 0 ? writeValidationRecords(buffer, records) : buffer;
       },
+      workbookMeta: () => {
+        const book = apiRef.current?.getActiveWorkbook();
+        const cf = book
+          ? book.getSheets().map((sheet) => ({
+              sheetName: sheet.getSheetName(),
+              rules: sheet.getConditionalFormattingRules(),
+            }))
+          : [];
+        return { version: 1, charts, cf, print: printSettings };
+      },
       isEditing: () => editingRef.current,
       openFind,
       findState: () => ({
@@ -2269,6 +2281,7 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
     }),
     [
       activeRange,
+      charts,
       clearFilter,
       clearFilterInternal,
       csvText,

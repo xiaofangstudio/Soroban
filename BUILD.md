@@ -1,6 +1,6 @@
 # Soroban · 构建与验收
 
-> 小方工作室 · Papyra 办公套件 ｜ 适用 M0 / M1 / M2 / M3 / M4 / M8 / M9 / M10 / 透视 / 条件格式（v0.10.0）
+> 小方工作室 · Papyra 办公套件 ｜ 适用 M0 / M1 / M2 / M3 / M4 / M8 / M9 / M10 / 透视 / 条件格式 / xlsx 自包含（v0.11.0）
 > 开发机：Windows 10/11 + PowerShell 7 + Node 22 + Rust stable + VS Build Tools（Tauri 2 需要 WebView2 与 MSVC）
 
 ## 一 环境
@@ -66,7 +66,8 @@ Soroban/
       tauri.ts              read_document / write_document / 文件探测
       recents.ts            最近文件 localStorage
       formulas.ts           528 函数表、常用排序、搜索/前缀匹配
-      charts.ts             图表类型 / 数据归一化 / sidecar 读写
+      charts.ts             图表类型 / 数据归一化 / 旧 sidecar 兼容
+      workbookMeta.ts       xlsx docProps/custom.xml 自包含元数据
   src-tauri/
     src/lib.rs              窗口入口、二进制读写、原子保存
     src/mcp.rs              --mcp stdio 服务（4 个只读工具）
@@ -256,7 +257,7 @@ Copy-Item src-tauri\target\release\soroban.exe .\Soroban.exe -Force
 
 - **读**：前端 `invoke("read_document")`，Rust 用 `tauri::ipc::Response` 返回 `Vec<u8>`，整份文件一次进内存
 - **写**：前端把 Univer 快照经 `@mertdeveci55/univer-import-export` 生成 xlsx buffer，再 `invoke("write_document", { path, data })`
-- **原子替换**：先写 `*.soroban-tmp`；若目标存在先改名为 `*.soroban-bak`，rename 成功再删备份；失败回滚原文件
+- **原子替换**：先写 `*.xlsx.tmp`；若目标存在先改名为 `*.xlsx.bak`，rename 成功再删备份；失败回滚原文件
 - **公式导入**：桥接库把公式放在 `v`（字符串）或 `f` 缓存值两种形态。`normalizeFormulas()` 统一改成 `f`、清掉 `v` 缓存；建簿后调用 `univerAPI.getFormula().executeCalculation()` 重算
 - **版式修复**：部分 xlsx 不带行高，桥接库返回 `h=0 / ah=0` 会让网格空白；`normalizeLayout()` 回填 `defaultRowHeight` / `defaultColumnWidth`，零宽列同步修复
 - **大小上限**：M0 前端限制 80MB；超出直接中文报错，不尝试解析
@@ -584,13 +585,40 @@ Copy-Item src-tauri\target\release\soroban.exe .\Soroban.exe -Force
 
 均未签名。0.9.0 安装包保留作历史；`release-0.10.0.sha256` 已写入。
 
+### 7.27 0.11.0 xlsx 自包含验收记录
+
+| 项 | 结果 |
+| --- | --- |
+| 自包含保存 | `M13-元数据-working.xlsx` 插 1 图表、1 条色阶、打印 A1:C13 / 90%，保存为 `M13-元数据.xlsx` 10,364 B、18 个 ZIP 条目 |
+| 清缓存重开 | 删除全部 `soroban:*` localStorage 后重开，图表 1、条件格式 1、打印 90% / A1:C13 均恢复，dirty=false |
+| 结构 | `docProps/custom.xml` 1 个 `SorobanData` 属性；Content Types Override + package relationship 齐全；全部 XML / rels 解析 0 错误 |
+| 已有属性合并 | 预置 `团队=研发`（pid 2）后保存，结果 `团队`（pid 2）+ `SorobanData`（pid 3），无覆盖、无 pid 重复 |
+| 外部解析 | SheetJS 可读 `月度` / `复盘` 两张表 |
+| 回归 | M0 / M2 / M12 CF / M4 打印全过 |
+| MCP / Rust | version 0.11.0 四工具；`cargo test` 7 passed |
+| 构建 | 1927 modules，主 JS 10,271.66 kB、CSS 180.88 kB；release 1m 36s；NSIS 4.19 MiB / 4,395,449 B |
+| 安装烟测 | 静默安装退出码 0；安装版 exe 7,013,888 B、uninstall 79,425 B、版本 0.11.0；自包含 E2E、属性合并与 MCP 通过；卸载退出码 0，HKCU 无残留 |
+| 便携包 | 4,683,983 B，解压 exe 哈希与发布件一致 |
+
+截图：`review-0.11/001-metadata-reopen.png`、`002-meta-merge.png`。日志：`metadata-release.txt`、`meta-merge-release.txt`、`m0-release.txt`、`cf-release.txt`、`mcp-release.txt`、`metadata-installed.txt`、`meta-merge-installed.txt`、`mcp-installed.txt`、`rust-test.txt`、`build-release-3.log`。
+
+### 7.28 0.11.0 产物
+
+| 产物 | 大小 | SHA-256 |
+| --- | --- | --- |
+| `Soroban.exe` | 7,013,888 B | `C2876FDE41FA1CD690B17D6DCB0F9959107EDB280663F191BA64390491B105AB` |
+| `Soroban_0.11.0_x64-setup.exe` | 4,395,449 B | `BAF235CE4D4A8E96743B5AB32B88039A073696791403F225243FD5D13D61F5AA` |
+| `Soroban-0.11.0-portable-win64.zip` | 4,683,983 B | `C7CAB8E7C1941F980B11A58D57BC1F75F4DC4B01B74697310DFE0F0145FCF187` |
+
+安装版 exe 哈希 `B5E3508E9D81E803DC1911239AEA59B67510FAD9EA1EEC4464FCD394A3AFF290`；均未签名。0.10.0 安装包保留作历史；`release-0.11.0.sha256` / `release-soroban-0.11.0.sha256` 已写入。
+
 ## 八 已知问题
 
 - Univer OSS 无 xlsx 转换后端，导出走 MIT 桥接库；图片等复杂对象仍未验证
 - 数据验证已在 0.8.0 写入标准 `<dataValidations>` 与 `xl/soroban-validations.json`；外部 Excel 只显示标准子集（下拉 / 数值），Soroban 专属类型以清单为准
 - 数据透视 0.9.0 是一次性静态汇总：单行字段 + 单列字段 + 单值字段，不写 Excel 原生 PivotTable，不自动刷新，无字段拖拽 / 切片器 / Top N / 日期分组
 - 条件格式 0.10.0 图标集固定三红绿灯 + 67% / 33%；公式规则只认 TRUE / FALSE，图标与公式同区叠加时层级由 Univer 决定，可能压住背景色
-- 图表与条件格式只存 localStorage sidecar（`soroban:charts:*` / `soroban:cf:*`），不随 xlsx 走：换路径、换机器或 Excel 打开都看不到
+- 图表、条件格式与打印设置在 0.11.0 写入 xlsx `docProps/custom.xml`，随文件恢复；Excel 保留自定义属性但不渲染 Soroban 浮动图表卡；第三方重写若删除该属性，图表会丢，单元格与已应用的条件格式样式仍在
 - 图表仅支持单表区域、首行表头 + 首列分类；无多区域 / 跨表 / 堆叠 / 次坐标轴 / 缩放
 - 排序最多 3 键，方向支持升 / 降 / 自定义序列；自定义未列值统一排后，无按颜色 / 图标排序；排序不写进 xlsx
 - 筛选最多 3 条、只有全局 AND / OR；不做逐条混合布尔优先级与括号分组；筛选只是视图态，保存时清空
@@ -606,13 +634,13 @@ Copy-Item src-tauri\target\release\soroban.exe .\Soroban.exe -Force
 - 图表卡屏外同样跳过布局 / 绘制但保留 DOM；图表坐标拖动时已限制在网格内
 - 选区收敛只处理超过 5,000 格 / 500 行 / 200 列的异常大选区，用户在表内主动全选仍由 Univer 按视口裁剪
 - 打印输出按单元格显示值，不重算公式、不还原完整字体 / 边框 / 条件格式，图表与图片不进打印
-- 打印设置只存 localStorage sidecar，不写 xlsx；区域按 sheet 记忆但换机 / 换路径不携带
+- 打印设置 0.11.0 起随 xlsx `docProps/custom.xml` 保存；Excel 保留属性，但不按 Soroban 的打印预览分页
 - 原生打印依赖 WebView2 `window.print()`，只验证对话框与页数，未实际出纸
 - 十万行 / 10MB 首次导入 release 0.6.1 实测约 10–12s（xlsx 解析与写入瓶颈，非渲染）；SheetJS 快路径仍未改
 - M1 记录的绿色小角标在 M2 / M3 验收截图中未复现；值 / 公式 / 保存正常，继续观察
 - 最近文件存在 localStorage，不含缩略图；`sheet_thumb` 卡片预览留 M4
 
-*小方工作室 · Soroban · BUILD ｜ 2026-11-26*
+*小方工作室 · Soroban · BUILD · 0.11.0 · 2026-11-27*
 
 
 

@@ -1,0 +1,3 @@
+XLSX META OK · 图表 1 · 条件格式 1 · 打印 90% / A1:C13
+XLSX STRUCTURE OK · custom.xml + content type + relation + workbook parse
+LOCALSTORAGE CLEARED · 重开仍恢复 · 控制台 0 错误
