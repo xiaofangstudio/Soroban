@@ -59,6 +59,9 @@ const barSet = async (row, column, text) => {
   await page.evaluate((r, c) => window.__soroban.selectCell(r, c), row, column);
   await sleep(180);
   await page.click(".fx-input");
+  await page.keyboard.down("Control");
+  await page.keyboard.press("KeyA");
+  await page.keyboard.up("Control");
   await page.keyboard.type(text);
   await page.keyboard.press("Enter");
   await sleep(320);
@@ -130,6 +133,7 @@ await sleep(350);
 assert.equal(await page.evaluate(() => window.__soroban.validationStatus(1, 7)), "invalid");
 await page.screenshot({ path: path.join(out, "801-dv-invalid.png") });
 await barSet(1, 7, "高");
+await sleep(350);
 assert.equal(await page.evaluate(() => window.__soroban.validationStatus(1, 7)), "valid");
 
 // 3. 数值区间：B3:B5

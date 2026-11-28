@@ -40,7 +40,24 @@ import {
   saveCharts,
 } from "../lib/charts";
 import type { ChartData, ChartSpec, ChartType } from "../lib/charts";
+import {
+  addressOf,
+  commentStorageKey,
+  imageStorageKey,
+  loadComments,
+  loadImages,
+  makeCommentId,
+  makeImageId,
+  normalizeComments,
+  normalizeImages,
+  saveComments,
+  saveImages,
+} from "../lib/annotations";
+import type { CellComment, SheetImage } from "../lib/annotations";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { readFileBytes } from "../lib/tauri";
 import { ChartCard, ChartStudio } from "./ChartLayer";
+import { CommentPanel, ImageCard } from "./Annotations";
 import { CellTools } from "./CellTools";
 import type { CellToolAction, CellToolState } from "./CellTools";
 import { ValidationPanel } from "./ValidationPanel";
@@ -220,6 +237,9 @@ export type EditorHandle = {
   csvText: () => string;
   hiddenRows: () => number;
   openPrint: () => void;
+  addImage: (dataUrl: string, name: string) => boolean;
+  commentCount: () => number;
+  imageCount: () => number;
   printInfo: () => {
     open: boolean;
     settings: PrintSettings;
@@ -238,6 +258,7 @@ type Props = {
   docPath: string | null;
   name: string;
   bytes: Uint8Array | null;
+  dark: boolean;
   initialRows?: CsvCell[][] | null;
   initialSheetName?: string;
   onReady: (sheets: number) => void;
@@ -589,7 +610,7 @@ function fitWrappedRows(sheet: FWorksheet, range: FRange): void {
 }
 
 export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
-  { docKey, docPath, name, bytes, initialRows, initialSheetName, onReady, onSheetCount, onDirty, onError, onInfo, onCsvImport, onCsvExport, onState },
+  { docKey, docPath, name, bytes, dark, initialRows, initialSheetName, onReady, onSheetCount, onDirty, onError, onInfo, onCsvImport, onCsvExport, onState },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -634,6 +655,11 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
   const [chartError, setChartError] = useState("");
   const [chartTick, setChartTick] = useState(0);
   const [charts, setCharts] = useState<ChartSpec[]>([]);
+  const [comments, setComments] = useState<CellComment[]>([]);
+  const [images, setImages] = useState<SheetImage[]>([]);
+  const [commentOpen, setCommentOpen] = useState(false);
+  const [activeRow, setActiveRow] = useState(0);
+  const [activeColumn, setActiveColumn] = useState(0);
   const [dataContext, setDataContext] = useState<DataContext>(EMPTY_DATA_CONTEXT);
   const [filterInfo, setFilterInfo] = useState<FilterInfo | null>(null);
   const [freezeInfo, setFreezeInfo] = useState<{ rows: number; columns: number } | null>(null);
@@ -646,6 +672,8 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
   const chartKeyRef = useRef(chartStorageKey(docPath, name));
   const cfKeyRef = useRef(cfStorageKey(docPath, name));
   const printKeyRef = useRef(printStorageKey(docPath, name));
+  const commentKeyRef = useRef(commentStorageKey(docPath, name));
+  const imageKeyRef = useRef(imageStorageKey(docPath, name));
   const filterScopeRef = useRef<FilterScope | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const skipSelectRef = useRef(false);
@@ -687,6 +715,116 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
     setCharts(next);
     saveCharts(chartKeyRef.current, next);
   }, []);
+
+  const updateComments = useCallback((next: CellComment[]) => {
+    setComments(next);
+    saveComments(commentKeyRef.current, next);
+    callbacksRef.current.onDirty();
+  }, []);
+
+  const updateImages = useCallback((next: SheetImage[]) => {
+    setImages(next);
+    saveImages(imageKeyRef.current, next);
+    callbacksRef.current.onDirty();
+  }, []);
+
+  const addComment = useCallback((text: string) => {
+    const sheetName = apiRef.current?.getActiveWorkbook()?.getActiveSheet()?.getSheetName();
+    if (!sheetName) return;
+    const comment: CellComment = {
+      id: makeCommentId(),
+      sheetName,
+      row: activeRow,
+      column: activeColumn,
+      text: text.trim(),
+      author: "本机用户",
+      createdAt: Date.now(),
+      resolved: false,
+    };
+    updateComments([...comments, comment]);
+    callbacksRef.current.onInfo(`已在 ${addressOf(activeRow, activeColumn)} 添加批注`);
+  }, [activeColumn, activeRow, comments, updateComments]);
+
+  const patchComment = useCallback((id: string, patch: Partial<CellComment>) => {
+    updateComments(comments.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  }, [comments, updateComments]);
+
+  const deleteComment = useCallback((id: string) => {
+    updateComments(comments.filter((item) => item.id !== id));
+  }, [comments, updateComments]);
+
+  const jumpComment = useCallback((comment: CellComment) => {
+    const book = apiRef.current?.getActiveWorkbook();
+    const sheet = book?.getSheetByName(comment.sheetName);
+    if (!book || !sheet) return;
+    book.setActiveSheet(sheet);
+    const range = sheet.getRange(comment.row, comment.column, 1, 1);
+    sheet.setActiveSelection(range);
+    setActiveAddr(addressOf(comment.row, comment.column));
+    setActiveRow(comment.row);
+    setActiveColumn(comment.column);
+  }, []);
+
+  const placeImage = useCallback((dataUrl: string, fileName: string) => {
+    const book = apiRef.current?.getActiveWorkbook();
+    const sheetName = book?.getActiveSheet()?.getSheetName();
+    if (!book || !sheetName) return false;
+    const offset = images.filter((item) => item.sheetName === sheetName).length * 18;
+    const grid = gridRef.current;
+    const image: SheetImage = {
+      id: makeImageId(),
+      sheetName,
+      name: fileName || "图片",
+      dataUrl,
+      x: 36 + offset,
+      y: Math.max(120, (grid?.clientHeight ?? 620) - 220 + offset),
+      width: 280,
+      height: 180,
+    };
+    updateImages([...images, image]);
+    callbacksRef.current.onInfo(`已插入 ${image.name}`);
+    return true;
+  }, [images, updateImages]);
+
+  const insertImage = useCallback(async () => {
+    try {
+      const path = await openDialog({
+        multiple: false,
+        filters: [{ name: "图片", extensions: ["png", "jpg", "jpeg", "webp", "gif"] }],
+      });
+      if (!path || Array.isArray(path)) return;
+      const bytes = await readFileBytes(path);
+      if (bytes.length > 8 * 1024 * 1024) {
+        callbacksRef.current.onError("图片超过 8MB，暂不插入");
+        return;
+      }
+      const ext = path.split(".").pop()?.toLowerCase() ?? "png";
+      const mime = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext === "webp" ? "image/webp" : ext === "gif" ? "image/gif" : "image/png";
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const copy = new Uint8Array(bytes);
+        const blob = new Blob([copy.buffer as ArrayBuffer], { type: mime });
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error ?? new Error("图片读取失败"));
+        reader.readAsDataURL(blob);
+      });
+      placeImage(dataUrl, path.split(/[\\/]/).pop() ?? "图片");
+    } catch (err) {
+      callbacksRef.current.onError(err instanceof Error ? err.message : String(err));
+    }
+  }, [placeImage]);
+
+  const moveImage = useCallback((id: string, x: number, y: number) => {
+    updateImages(images.map((item) => (item.id === id ? { ...item, x, y } : item)));
+  }, [images, updateImages]);
+
+  const resizeImage = useCallback((id: string, width: number, height: number) => {
+    updateImages(images.map((item) => (item.id === id ? { ...item, width, height } : item)));
+  }, [images, updateImages]);
+
+  const deleteImage = useCallback((id: string) => {
+    updateImages(images.filter((item) => item.id !== id));
+  }, [images, updateImages]);
 
   const persistCf = useCallback(() => {
     const book = apiRef.current?.getActiveWorkbook();
@@ -779,11 +917,19 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
   }, []);
 
   useEffect(() => {
+    apiRef.current?.toggleDarkMode(dark);
+  }, [dark]);
+
+  useEffect(() => {
     const key = chartStorageKey(docPath, name);
     chartKeyRef.current = key;
     cfKeyRef.current = cfStorageKey(docPath, name);
     printKeyRef.current = printStorageKey(docPath, name);
+    commentKeyRef.current = commentStorageKey(docPath, name);
+    imageKeyRef.current = imageStorageKey(docPath, name);
     setCharts(loadCharts(key));
+    setComments(loadComments(commentKeyRef.current));
+    setImages(loadImages(imageKeyRef.current));
     setPrintSettings(loadPrintSettings(printKeyRef.current));
     setPrintOpen(false);
     setPrintPreview(null);
@@ -802,6 +948,8 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
       return;
     }
     setActiveAddr(`${columnLetter(cell.startColumn)}${cell.startRow + 1}`);
+    setActiveRow(cell.startRow);
+    setActiveColumn(cell.startColumn);
     setCellToolState(readCellToolState(sheet, cell.startRow, cell.startColumn));
     if (!editingRef.current) {
       const range = sheet.getRange(cell.startRow, cell.startColumn);
@@ -1401,6 +1549,11 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
     [activeSheetName, chartDataFor, charts, chartTick, activeTab],
   );
 
+  const visibleImages = useMemo(
+    () => images.filter((image) => image.sheetName === activeSheetName),
+    [activeSheetName, images],
+  );
+
   const applyFormula = useCallback(
     (item: FormulaInfo, fromLibrary: boolean) => {
       const current = cellText;
@@ -1743,12 +1896,18 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
     if (charts.some((chart) => chart.sheetName === oldName)) {
       updateCharts(charts.map((chart) => chart.sheetName === oldName ? { ...chart, sheetName: clean } : chart));
     }
+    if (comments.some((item) => item.sheetName === oldName)) {
+      updateComments(comments.map((item) => item.sheetName === oldName ? { ...item, sheetName: clean } : item));
+    }
+    if (images.some((item) => item.sheetName === oldName)) {
+      updateImages(images.map((item) => item.sheetName === oldName ? { ...item, sheetName: clean } : item));
+    }
     refreshTabs();
     callbacksRef.current.onDirty();
     callbacksRef.current.onInfo(`工作表已改名为 ${clean}`);
     window.setTimeout(() => persistCf(), 180);
     return true;
-  }, [charts, persistCf, refreshTabs, updateCharts]);
+  }, [charts, comments, images, persistCf, refreshTabs, updateCharts, updateComments, updateImages]);
 
   const setSheetColor = useCallback((sheetId: string, color: string) => {
     const book = apiRef.current?.getActiveWorkbook();
@@ -1808,6 +1967,12 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
     if (charts.some((chart) => chart.sheetName === deletedName)) {
       updateCharts(charts.filter((chart) => chart.sheetName !== deletedName));
     }
+    if (comments.some((item) => item.sheetName === deletedName)) {
+      updateComments(comments.filter((item) => item.sheetName !== deletedName));
+    }
+    if (images.some((item) => item.sheetName === deletedName)) {
+      updateImages(images.filter((item) => item.sheetName !== deletedName));
+    }
     refreshTabs();
     callbacksRef.current.onDirty();
     callbacksRef.current.onInfo(`已删除 ${deletedName}`);
@@ -1816,7 +1981,7 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
       refreshDataContext();
     }, 180);
     return true;
-  }, [charts, clearFilterInternal, persistCf, refreshDataContext, refreshTabs, updateCharts]);
+  }, [charts, clearFilterInternal, comments, images, persistCf, refreshDataContext, refreshTabs, updateCharts, updateComments, updateImages]);
 
   const csvText = useCallback(() => {
     const sheet = apiRef.current?.getActiveWorkbook()?.getActiveSheet();
@@ -2169,7 +2334,7 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
               rules: sheet.getConditionalFormattingRules(),
             }))
           : [];
-        return { version: 1, charts, cf, print: printSettings };
+        return { version: 1, charts, cf, print: printSettings, comments, images };
       },
       isEditing: () => editingRef.current,
       openFind,
@@ -2257,6 +2422,9 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
       csvText,
       hiddenRows,
       openPrint,
+      addImage: (dataUrl: string, imageName: string) => placeImage(dataUrl, imageName),
+      commentCount: () => comments.length,
+      imageCount: () => images.length,
       printInfo: () => ({
         open: printOpen,
         settings: printSettings,
@@ -2282,6 +2450,8 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
     [
       activeRange,
       charts,
+      comments,
+      images,
       clearFilter,
       clearFilterInternal,
       csvText,
@@ -2297,6 +2467,7 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
       openFind,
       openPivot,
       openPrint,
+      placeImage,
       printOpen,
       printPreview,
       printSettings,
@@ -2363,6 +2534,7 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
       ],
     });
     apiRef.current = univerAPI;
+    univerAPI.toggleDarkMode(dark);
 
     const boot = async () => {
       let snapshot: IWorkbookData | undefined;
@@ -2573,6 +2745,11 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
     };
   }, [validationOpen]);
 
+  const activeSheetComments = comments.filter((item) => item.sheetName === activeSheetName);
+  const activeComment = activeSheetComments.find(
+    (item) => item.row === activeRow && item.column === activeColumn,
+  );
+
   return (
     <div className="sheet-host">
       <FormatToolbar
@@ -2666,6 +2843,34 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
           <svg viewBox="0 0 16 16" aria-hidden>
             <path d="M8 1.9 13 3.8v4.3c0 3-2 5.1-5 6.1-3-1-5-3.1-5-6.1V3.8L8 1.9Z" fill="none" stroke="currentColor" strokeWidth="1.2" />
             <path d="m5.9 8 1.5 1.5 2.9-3" stroke="currentColor" strokeWidth="1.3" fill="none" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className={`comment-mark${commentOpen ? " active" : ""}${activeComment ? " has-note" : ""}`}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => setCommentOpen((open) => !open)}
+          title={activeComment ? `批注：${activeComment.text}` : "单元格批注"}
+          aria-label="单元格批注"
+        >
+          <svg viewBox="0 0 16 16" aria-hidden>
+            <path d="M2.5 3.2h11v7.4H8l-3.2 2.7v-2.7h-2.3Z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M5 6h6M5 8.2h4" stroke="currentColor" strokeWidth="1" opacity=".65" />
+          </svg>
+          {activeComment ? <i className="comment-dot" /> : null}
+        </button>
+        <button
+          type="button"
+          className="image-mark"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => { void insertImage(); }}
+          title="插入浮动图片"
+          aria-label="插入浮动图片"
+        >
+          <svg viewBox="0 0 16 16" aria-hidden>
+            <rect x="2.2" y="3" width="11.6" height="10" rx="1.4" fill="none" stroke="currentColor" strokeWidth="1.2" />
+            <circle cx="5.4" cy="6.2" r="1.1" fill="currentColor" opacity=".7" />
+            <path d="m3.4 11.4 3-3 2.2 2.1 2-2.2 2.6 3.1" fill="none" stroke="currentColor" strokeWidth="1.1" />
           </svg>
         </button>
         <input
@@ -2804,6 +3009,15 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
       <div className="sheet-grid" ref={gridRef}>
         <div className="univer-host sheet-container" ref={hostRef} />
         <div className="chart-layer">
+          {visibleImages.map((image) => (
+            <ImageCard
+              key={image.id}
+              image={image}
+              onMove={moveImage}
+              onResize={resizeImage}
+              onDelete={deleteImage}
+            />
+          ))}
           {visibleCharts.map(({ chart, data }) => (
             <ChartCard key={chart.id} chart={chart} data={data} onMove={moveChart} onDelete={deleteChart} />
           ))}
@@ -2837,6 +3051,19 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
             />
           ) : null}
         </div>
+        {commentOpen ? (
+          <CommentPanel
+            sheetName={activeSheetName}
+            comments={comments}
+            activeRow={activeRow}
+            activeColumn={activeColumn}
+            onCreate={addComment}
+            onUpdate={patchComment}
+            onDelete={deleteComment}
+            onJump={jumpComment}
+            onClose={() => setCommentOpen(false)}
+          />
+        ) : null}
         {loading && (
           <div className="sheet-loading">
             <div className="sheet-loading-inner">

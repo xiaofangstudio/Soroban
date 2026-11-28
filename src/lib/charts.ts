@@ -1,6 +1,6 @@
 import type { IConditionFormattingRule } from "@univerjs/sheets-conditional-formatting";
 
-export type ChartType = "column" | "line" | "area" | "pie";
+export type ChartType = "column" | "bar" | "line" | "area" | "combo" | "pie";
 export type ChartSeries = {
   name: string;
   values: number[];
@@ -26,8 +26,10 @@ export type ChartSpec = {
 
 export const CHART_TYPE_LABEL: Record<ChartType, string> = {
   column: "柱状图",
+  bar: "条形图",
   line: "折线图",
   area: "面积图",
+  combo: "组合图",
   pie: "饼图",
 };
 

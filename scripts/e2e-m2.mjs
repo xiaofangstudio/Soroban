@@ -153,7 +153,7 @@ const studio = await page.evaluate(() => {
 });
 assert.equal(studio.range, "A1:C13");
 assert.equal(studio.title, "柱状图 · 月度");
-assert.equal(studio.types, 4);
+assert.equal(studio.types, 6);
 assert.equal(studio.sum, "3213000");
 assert.ok(studio.rect.right <= 1280 && studio.rect.bottom <= 800);
 await page.screenshot({ path: path.join(out, "210-chart-studio.png") });
@@ -184,7 +184,7 @@ cards = await page.evaluate(() => [...document.querySelectorAll(".chart-card")].
 assert.equal(cards[0].sum, "3345000", "编辑单元格后图表未联动");
 await page.screenshot({ path: path.join(out, "212-chart-linked.png") });
 
-for (const index of [1, 2, 3]) {
+for (const index of [1, 2, 3, 4, 5]) {
   await page.evaluate(() => window.__soroban.selectRange(0, 0, 12, 2));
   await page.evaluate(() => document.querySelector(".fmt-btn.chart")?.click());
   await page.waitForSelector(".chart-studio", { timeout: 3000 });
@@ -201,8 +201,8 @@ cards = await page.evaluate(() => [...document.querySelectorAll(".chart-card")].
     rect: { x: rect.x, y: rect.y, right: rect.right, bottom: rect.bottom },
   };
 }));
-assert.equal(cards.length, 4);
-assert.deepEqual(cards.map((card) => card.title), ["柱状图 · 月度", "折线图 · 月度", "面积图 · 月度", "饼图 · 月度"]);
+assert.equal(cards.length, 6);
+assert.deepEqual(cards.map((card) => card.title), ["柱状图 · 月度", "条形图 · 月度", "折线图 · 月度", "面积图 · 月度", "组合图 · 月度", "饼图 · 月度"]);
 assert.ok(cards.every((card) => card.rect.x >= 0 && card.rect.right <= 1280));
 assert.ok(cards.every((card) => card.rect.y >= 112 && card.rect.bottom <= 800));
 await page.screenshot({ path: path.join(out, "213-charts-four.png") });
@@ -225,7 +225,7 @@ assert.equal(Math.round(afterDrag.y - beforeDrag.y), 60);
 
 await page.evaluate(() => document.querySelectorAll(".chart-close")[3]?.click());
 await sleep(400);
-assert.equal(await page.evaluate(() => document.querySelectorAll(".chart-card").length), 3);
+assert.equal(await page.evaluate(() => document.querySelectorAll(".chart-card").length), 5);
 assert.deepEqual(errors, []);
 
 // 4. 保存 / 重开：条件格式与图表随文档恢复

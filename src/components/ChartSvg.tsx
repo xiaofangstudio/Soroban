@@ -100,6 +100,7 @@ export function ChartSvg({ type, data }: Props) {
   }
 
   if (type === "pie") return <PieChart data={data} />;
+  if (type === "bar") return <BarChart data={data} />;
 
   const rawMax = Math.max(
     0,
@@ -112,6 +113,8 @@ export function ChartSvg({ type, data }: Props) {
     (total, series) => total + series.values.reduce((part, value) => part + value, 0),
     0,
   );
+  const barSeries = type === "combo" ? data.series.slice(0, 1) : data.series;
+  const lineSeries = type === "combo" ? data.series.slice(1) : data.series.filter(() => type === "line");
 
   return (
     <svg
@@ -124,14 +127,14 @@ export function ChartSvg({ type, data }: Props) {
     >
       <Legend data={data} />
       <GridLines max={max} />
-      {type === "column"
-        ? data.series.map((series, seriesIndex) =>
+      {(type === "column" || type === "combo")
+        ? barSeries.map((series, seriesIndex) =>
             series.values.map((value, index) => {
-              const barWidth = Math.max(3, Math.min(24, (groupWidth * 0.7) / data.series.length));
+              const barWidth = Math.max(3, Math.min(24, (groupWidth * 0.7) / barSeries.length));
               const groupOffset = LEFT + groupWidth * index + groupWidth / 2;
               const x =
                 groupOffset -
-                (barWidth * data.series.length) / 2 +
+                (barWidth * barSeries.length) / 2 +
                 barWidth * seriesIndex;
               const h = Math.max(0, (value / max) * PLOT_H);
               return (
@@ -149,8 +152,9 @@ export function ChartSvg({ type, data }: Props) {
             }),
           )
         : null}
-      {type === "line"
-        ? data.series.map((series, seriesIndex) => {
+      {(type === "line" || type === "combo")
+        ? lineSeries.map((series, seriesIndex) => {
+            const colorIndex = (type === "combo" ? seriesIndex + 1 : seriesIndex) % CHART_COLORS.length;
             const points = series.values
               .map((value, index) => {
                 const x = LEFT + groupWidth * (index + 0.5);
@@ -163,7 +167,7 @@ export function ChartSvg({ type, data }: Props) {
                 <polyline
                   points={points}
                   fill="none"
-                  stroke={CHART_COLORS[seriesIndex % CHART_COLORS.length]}
+                  stroke={CHART_COLORS[colorIndex]}
                   strokeWidth={2}
                   strokeLinejoin="round"
                 />
@@ -174,7 +178,7 @@ export function ChartSvg({ type, data }: Props) {
                     cy={baseline - (value / max) * PLOT_H}
                     r={2.4}
                     fill="#fff"
-                    stroke={CHART_COLORS[seriesIndex % CHART_COLORS.length]}
+                    stroke={CHART_COLORS[colorIndex]}
                     strokeWidth={1.4}
                   />
                 ))}
@@ -201,6 +205,86 @@ export function ChartSvg({ type, data }: Props) {
         : null}
       <line x1={LEFT} x2={LEFT + PLOT_W} y1={baseline} y2={baseline} stroke="#c7d5cd" strokeWidth={1} />
       <XLabels labels={data.labels} />
+    </svg>
+  );
+}
+
+function BarChart({ data }: { data: ChartData }) {
+  const rawMax = Math.max(0, ...data.series.flatMap((series) => series.values.map((value) => Math.abs(value))));
+  const max = niceMax(rawMax);
+  const left = 96;
+  const plotW = 288;
+  const top = 30;
+  const plotH = 158;
+  const rowH = plotH / Math.max(1, data.labels.length);
+  const seriesCount = Math.max(1, data.series.length);
+  const barH = Math.max(4, Math.min(18, (rowH * 0.72) / seriesCount));
+  const sum = data.series.reduce(
+    (total, series) => total + series.values.reduce((part, value) => part + value, 0),
+    0,
+  );
+
+  return (
+    <svg
+      className="chart-svg"
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="xMidYMid meet"
+      role="img"
+      data-chart-sum={Math.round(sum * 100) / 100}
+      data-chart-max={rawMax}
+    >
+      {[0, 1, 2, 3, 4].map((index) => {
+        const x = left + (plotW / 4) * index;
+        return (
+          <line
+            key={index}
+            x1={x}
+            x2={x}
+            y1={top}
+            y2={top + plotH}
+            stroke={index === 0 ? "#c7d5cd" : "#e8f0eb"}
+            strokeWidth={1}
+          />
+        );
+      })}
+      {data.series.map((series, seriesIndex) =>
+        series.values.map((value, index) => {
+          const y =
+            top +
+            rowH * index +
+            (rowH - barH * seriesCount) / 2 +
+            barH * seriesIndex;
+          const w = Math.max(0, (Math.abs(value) / max) * plotW);
+          return (
+            <rect
+              key={`${series.name}-${index}`}
+              x={left}
+              y={y}
+              width={w}
+              height={barH}
+              rx={2}
+              fill={CHART_COLORS[seriesIndex % CHART_COLORS.length]}
+              fillOpacity={0.9}
+            />
+          );
+        }),
+      )}
+      {data.labels.map((label, index) => (
+        <text
+          key={`${label}-${index}`}
+          x={left - 8}
+          y={top + rowH * (index + 0.5) + 3}
+          textAnchor="end"
+          fontSize={9}
+          fill="#5f776b"
+        >
+          {label.length > 7 ? `${label.slice(0, 6)}…` : label}
+        </text>
+      ))}
+      <text x={left + plotW} y={top + plotH + 16} textAnchor="end" fontSize={9} fill="#7d9488">
+        {compact(max)}
+      </text>
+      <Legend data={data} />
     </svg>
   );
 }

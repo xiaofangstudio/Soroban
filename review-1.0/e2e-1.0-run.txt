@@ -1,0 +1,12 @@
+open {
+  screen: 'editor',
+  name: 'M15-1.0-working.xlsx',
+  path: 'D:\\20533\\deskbox\\fangwork\\Papyra\\Soroban\\review-1.0\\M15-1.0-working.xlsx',
+  dirty: false,
+  sheets: 2,
+  canUndo: false,
+  busy: false
+} marks 1
+click comment-mark
+panels 1
+SOROBAN 1.0 OK · 批注 1 · 浮动图片 1 · 深色/浅色 · 清 localStorage 重开恢复

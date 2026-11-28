@@ -3,12 +3,23 @@ import { cfStorageKey, chartStorageKey, saveCfRules, saveCharts } from "./charts
 import type { CfRuleGroup, ChartSpec } from "./charts";
 import { normalizePrintSettings, printStorageKey, savePrintSettings } from "./print";
 import type { PrintSettings } from "./print";
+import {
+  commentStorageKey,
+  imageStorageKey,
+  normalizeComments,
+  normalizeImages,
+  saveComments,
+  saveImages,
+} from "./annotations";
+import type { CellComment, SheetImage } from "./annotations";
 
 export type WorkbookMeta = {
   version: 1;
   charts: ChartSpec[];
   cf: CfRuleGroup[];
   print: PrintSettings;
+  comments: CellComment[];
+  images: SheetImage[];
 };
 
 const PROPERTY_NAME = "SorobanData";
@@ -59,7 +70,14 @@ function normalizeMeta(input: unknown): WorkbookMeta | null {
     ? raw.cf.filter((group) => group && typeof group.sheetName === "string" && Array.isArray(group.rules))
     : [];
   const print = normalizePrintSettings(raw.print && typeof raw.print === "object" ? raw.print : {});
-  return { version: 1, charts, cf, print };
+  return {
+    version: 1,
+    charts,
+    cf,
+    print,
+    comments: normalizeComments(raw.comments),
+    images: normalizeImages(raw.images),
+  };
 }
 
 export async function readWorkbookMeta(bytes: Uint8Array): Promise<WorkbookMeta | null> {
@@ -173,4 +191,6 @@ export function hydrateWorkbookMeta(path: string | null, name: string, meta: Wor
   saveCharts(chartStorageKey(path, name), meta.charts);
   saveCfRules(cfStorageKey(path, name), meta.cf);
   savePrintSettings(printStorageKey(path, name), meta.print);
+  saveComments(commentStorageKey(path, name), meta.comments);
+  saveImages(imageStorageKey(path, name), meta.images);
 }

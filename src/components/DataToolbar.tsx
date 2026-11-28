@@ -505,8 +505,8 @@ export function DataToolbar({
       </div>
       <div className="data-grow" />
 
-      <button className="data-btn quiet" onClick={onImportCsv} title="从 CSV 新建表格">
-        导入 CSV
+      <button className="data-btn quiet" onClick={onImportCsv} title="从 CSV / TSV / TXT 新建表格">
+        导入数据
       </button>
       <button className="data-btn quiet" onClick={onExportCsv} title="把当前工作表导出为 CSV">
         导出 CSV

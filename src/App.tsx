@@ -40,7 +40,7 @@ type CsvPending = {
 };
 
 const XLSX_FILTER = [{ name: "Excel 工作簿", extensions: ["xlsx"] }];
-const CSV_FILTER = [{ name: "CSV 文件", extensions: ["csv"] }];
+const CSV_FILTER = [{ name: "CSV / TSV / TXT 数据", extensions: ["csv", "tsv", "txt"] }];
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("splash");
@@ -54,6 +54,13 @@ export default function App() {
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [dark, setDark] = useState(() => {
+    try {
+      return window.localStorage.getItem("soroban:theme") === "dark";
+    } catch {
+      return false;
+    }
+  });
   const [csvPending, setCsvPending] = useState<CsvPending | null>(null);
   const editorRef = useRef<EditorHandle>(null);
   const toastTimer = useRef<number>();
@@ -75,6 +82,15 @@ export default function App() {
       setToast((cur) => (cur?.id === next.id ? null : cur));
     }, kind === "error" ? 5200 : 2600);
   }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
+    try {
+      window.localStorage.setItem("soroban:theme", dark ? "dark" : "light");
+    } catch {
+      /* 主题偏好写不进去不影响使用 */
+    }
+  }, [dark]);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -550,6 +566,10 @@ export default function App() {
       },
       openPrint: () => editorRef.current?.openPrint(),
       printInfo: () => editorRef.current?.printInfo() ?? null,
+      addImage: (dataUrl: string, name: string) => editorRef.current?.addImage(dataUrl, name) ?? false,
+      commentCount: () => editorRef.current?.commentCount() ?? 0,
+      imageCount: () => editorRef.current?.imageCount() ?? 0,
+      toggleTheme: () => setDark((value) => !value),
     };
   });
 
@@ -581,6 +601,8 @@ export default function App() {
             statusKind={statusForUi.kind}
             canUndo={canUndo}
             canRedo={canRedo}
+            dark={dark}
+            onTheme={() => setDark((value) => !value)}
             onBack={backToWelcome}
             onOpen={pickAndOpen}
             onSave={saveDoc}
@@ -602,6 +624,7 @@ export default function App() {
             docPath={doc.path}
             name={doc.name}
             bytes={doc.bytes}
+            dark={dark}
             initialRows={doc.csvRows}
             initialSheetName={doc.csvSheetName}
             onReady={(count) => {

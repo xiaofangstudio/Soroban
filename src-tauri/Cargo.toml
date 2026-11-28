@@ -1,6 +1,6 @@
 [package]
 name = "soroban"
-version = "0.11.0"
+version = "1.0.0"
 description = "Soroban - 小方工作室表格工作台"
 authors = ["小方工作室"]
 edition = "2021"

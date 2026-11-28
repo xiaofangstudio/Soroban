@@ -51,11 +51,11 @@ export function CsvImportDialog({ name, size, bytes, guessedEncoding, onCancel, 
   };
 
   return (
-    <div className="csv-mask" role="dialog" aria-modal="true" aria-label="CSV 导入预览">
+    <div className="csv-mask" role="dialog" aria-modal="true" aria-label="数据导入预览">
       <div className="csv-dialog">
         <div className="csv-head">
           <div>
-            <strong>导入 CSV</strong>
+            <strong>导入数据</strong>
             <span>{name} · {Math.max(1, Math.round(size / 1024))} KB</span>
           </div>
           <button className="csv-close" onClick={onCancel} title="取消导入">×</button>

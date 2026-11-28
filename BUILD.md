@@ -640,7 +640,19 @@ Copy-Item src-tauri\target\release\soroban.exe .\Soroban.exe -Force
 - M1 记录的绿色小角标在 M2 / M3 验收截图中未复现；值 / 公式 / 保存正常，继续观察
 - 最近文件存在 localStorage，不含缩略图；`sheet_thumb` 卡片预览留 M4
 
-*小方工作室 · Soroban · BUILD · 0.11.0 · 2026-11-27*
+## 7.29 1.0.0 构建与复验（2026-11-27 / 28）
+
+- 版本：`package.json`、`package-lock.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`（仅 `name = "soroban"` 包）、`src-tauri/tauri.conf.json` 全部改为 `1.0.0`。
+- 构建：`npm run tauri build`；Vite 43.84s，主 JS `dist/assets/index-DdlW651a.js` 10,287.47 kB；Rust release 2m 15s；NSIS `Soroban_1.0.0_x64-setup.exe` 4,399,531 B。
+- 发布件：`soroban.exe` 7,017,984 B，SHA-256 `C6977F023C62EEB8F741A6B2470C7269C59C71D1BC6EFFCFB16DADA62EC84B83`；安装包 SHA-256 `6C584BCAE875BDE6CBDE4B544D4286F0A877F2362BA6A744DBD70AB888FC2A50`。
+- Release E2E：`SOROBAN_CDP=http://127.0.0.1:9451 node scripts/e2e-1.0.mjs`、`e2e-1.0-charts.mjs` 通过；M0 / M2 / M3 / M4 / M8 / M9 / M10 / multi / pivot / cf / metadata 全部通过；MCP 4 工具通过；`cargo test --release` 7 passed。
+- 安装版 E2E：以 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9452` 启动安装版，1.0 功能与图表 / TSV 两个脚本通过。NSIS `/S` 安装退出码 0，安装目录 `review-0.11/install-smoke`，注册表版本 `1.0.0`；卸载 `/S` 退出码 0，目录删除，HKCU 无残留。安装中途本机断电，重启后先核对安装状态，未重放安装。
+- 便携包：`Soroban-1.0.0-portable-win64.zip` 4,688,490 B，解压含 `Soroban.exe`、`LICENSE`、`release-notes-1.0.0.md`、`release-1.0.0.sha256`；解压 exe 哈希与发布件一致。
+- 产物复制到 `Soroban/` 与套件根目录；`release-1.0.0.sha256` / `release-soroban-1.0.0.sha256` 已写入。0.11.0 安装包保留作历史。
+
+新增边界：批注与浮动图片只存在 Soroban 自定义属性，Excel 不渲染；大图 data URL 会放大 xlsx；批注作者固定“本机用户”；图片无旋转 / 裁剪 / 锁定 / 层级；TSV / TXT 导入不识别多工作表。
+
+*小方工作室 · Soroban · BUILD · 1.0.0 · 2026-11-28*
 
 
 

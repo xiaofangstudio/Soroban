@@ -1,0 +1,27 @@
+SOROBAN 1.0.0 INSTALL SMOKE
+============================
+
+Installer: Soroban_1.0.0_x64-setup.exe (4,399,531 B)
+Install mode: NSIS /S
+Install exit: 0
+Install path: D:\20533\deskbox\fangwork\Papyra\Soroban\review-0.11\install-smoke
+Registry: HKCU DisplayName=Soroban, DisplayVersion=1.0.0
+Installed exe: soroban.exe 7,017,984 B
+SHA-256: F6045D9381D436412151FE8668DEE6C92D9F89FF0F5B777CFDFA7D559F1CEB30
+FileVersion: 1.0.0
+ProductVersion: 1.0.0
+Uninstaller: uninstall.exe 79,425 B
+
+Installed app E2E (CDP 9452):
+- e2e-1.0.mjs: SOROBAN 1.0 OK · 批注 1 · 浮动图片 1 · 深色/浅色 · 清 localStorage 重开恢复
+- e2e-1.0-charts.mjs: SOROBAN 1.0 CHARTS OK · 条形图 + 组合图 · TSV 导入
+
+Uninstall mode: /S
+Uninstall exit: 0
+Install directory after uninstall: deleted
+HKCU Soroban entry after uninstall: none
+Running soroban process after uninstall: none
+
+Note: host powered off during the first install attempt. After reboot the
+registry/version/install directory were verified before continuing; the
+install was not replayed.

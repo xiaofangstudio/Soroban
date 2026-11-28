@@ -1,6 +1,6 @@
 # Soroban · 小方工作室表格计算
 
-> **小方工作室 · 出品** ｜ 立项规格 `v1.0` ｜ 2026-11-27 ｜ 状态：**0.11.0 xlsx 自包含**——图表、条件格式、打印设置写入标准 xlsx 的 `docProps/custom.xml`，换路径 / 换机器 / 清缓存都能恢复；保存临时文件改用通用 `.tmp` / `.bak`。此前：0.10.0 条件格式补全（三色图标集 + 公式规则）；0.9.0 数据透视（求和 / 计数 / 平均值 × 行列维度）；0.8.0 数据验证（下拉 / 数值 / 标准 xlsx 往返）；0.7.0 单元格工具（合并 / 九种边框 / 换行 / 垂直对齐 / 行列）；0.6.1 大表只画视口 / CSV 不选整块 / 打印预览与图表跳过屏外；0.6.0 查找替换 / 自动保存 / 自定义序列 / 标签颜色 / CSV 预览；0.5.1 多键排序 / 多条件筛选；M4 打印分页（0.5.0）；M3 排序筛选 / 多 sheet / CSV（0.4.0）；M2 格式 / 条件格式 / 四图表（0.3.0）；M1 528 函数 / 跨表 / 10 万行（0.2.0）
+> **小方工作室 · 出品** ｜ 立项规格 `v1.0` ｜ 2026-11-28 ｜ 状态：**1.0.0 批注 / 浮动图片 / 深色模式 / 六图表 / 数据导入**——在标准 xlsx 自包含基础上补齐协作痕迹与视觉表达；此前：0.11.0 xlsx 自包含（图表、条件格式、打印设置写入 `docProps/custom.xml`，换路径 / 换机器 / 清缓存都能恢复）；0.10.0 条件格式补全（三色图标集 + 公式规则）；0.9.0 数据透视（求和 / 计数 / 平均值 × 行列维度）；0.8.0 数据验证（下拉 / 数值 / 标准 xlsx 往返）；0.7.0 单元格工具（合并 / 九种边框 / 换行 / 垂直对齐 / 行列）；0.6.1 大表只画视口 / CSV 不选整块 / 打印预览与图表跳过屏外；0.6.0 查找替换 / 自动保存 / 自定义序列 / 标签颜色 / CSV 预览；0.5.1 多键排序 / 多条件筛选；M4 打印分页（0.5.0）；M3 排序筛选 / 多 sheet / CSV（0.4.0）；M2 格式 / 条件格式 / 四图表（0.3.0）；M1 528 函数 / 跨表 / 10 万行（0.2.0）
 > 对标 Microsoft Excel / LibreOffice Calc ｜ 全中文 ｜ 本地优先 ｜ 零账号 ｜ 零 AI ｜ MIT
 > **Papyra 办公套件四件套之二**
 > 套件分色：Penna 靛蓝 · **Soroban 翠绿** · Lanterna 橙红 · Voluma 绛红
@@ -920,6 +920,63 @@ release 构建：`npm run tauri build`，release profile 1m 07s，NSIS 4.12 MiB�
 
 产物已复制到 `Soroban/` 与套件根目录，`release-0.11.0.sha256` / `release-soroban-0.11.0.sha256` 已写入；0.10.0 安装包保留作历史。安装版 exe 哈希 `B5E3508E9D81E803DC1911239AEA59B67510FAD9EA1EEC4464FCD394A3AFF290`。便携版含 `Soroban.exe`、`LICENSE` 1,072 B、`release-0.11.0.sha256` 172 B、`release-notes-0.11.0.md` 2,386 B。均未签名。
 
-*小方工作室 · Soroban · 0.11.0 xlsx 自包含 ｜ Papyra 办公套件 ｜ 2026-11-27*
+## 二十四 1.0.0 协作痕迹、深色与图表扩展（2026-11-28）
+
+1.0.0 是 Soroban 一期的功能收口。原生文件仍是标准 `.xlsx`，新增能力继续写进 `docProps/custom.xml` 的 `SorobanData`，不额外建品牌目录，也不自造后缀。
+
+### 24.1 本期能力
+
+- **单元格批注**：`src/lib/annotations.ts` 定义 `CellComment`，按工作表 + 单元格地址保存；`CommentPanel` 支持新增、编辑、标记解决 / 重新打开、删除、跳转到批注单元格；筛选“未解决 / 全部”，显示作者与本机时间。
+- **浮动图片**：`SheetImage` 保存 data URL、位置、尺寸与原始名称；`ImageCard` 可拖动、右下角缩放、单张删除；插入入口在公式栏，支持 SVG / PNG / JPEG 等浏览器可解码格式。
+- **批注 / 图片随文档走**：`WorkbookMeta` 扩展 `comments` 与 `images`，保存时与图表、条件格式、打印设置一起写入 xlsx 自定义属性；打开时先读 xlsx 元数据，再水合到 `soroban:comments:*` / `soroban:images:*` 本地键。
+- **深色模式**：顶栏“深色 / 浅色”一键切换，`document.documentElement.dataset.theme` 驱动 CSS 变量，`univerAPI.toggleDarkMode()` 同步网格；主题写入 `soroban:theme`，重启保持。新增 `src/annotations.css` 覆盖顶栏、格式栏、数据栏、公式栏、标签、批注面板、图片卡与图表面板。
+- **图表扩展**：`ChartType` 增 `bar` 与 `combo`；条形图为横向分类 + 数值，组合图为柱形 + 折线双系列；图表工作室改为 6 类型三列布局，仍支持标题、区域、插入、拖动、缩放与数据联动。
+- **数据导入扩展**：导入过滤器从 CSV 扩到 `csv / tsv / txt`；沿用自动分隔符识别（逗号 / 制表符 / 分号）与 UTF-8 / GB18030 解码，导入前预览表头与行数。按钮与对话框文案统一为“导入数据”。
+
+### 24.2 实现位置
+
+- 新增 `src/lib/annotations.ts`、`src/components/Annotations.tsx`、`src/annotations.css`、`scripts/e2e-1.0.mjs`、`scripts/e2e-1.0-charts.mjs`。
+- 修改 `src/lib/workbookMeta.ts`（`WorkbookMeta` 增 `comments / images` 与规范化）、`src/components/SheetEditor.tsx`（批注 / 图片状态、增删改、跳转、拖动缩放、深浅色同步、图表类型）、`src/components/TopBar.tsx`（主题按钮）、`src/App.tsx`（主题持久化、元数据汇总、测试桥）、`src/lib/charts.ts`、`ChartLayer.tsx`、`ChartSvg.tsx`、`DataToolbar.tsx`、`CsvImportDialog.tsx`、`src/main.tsx`。
+- 测试桥新增 `addImage`、`commentCount`、`imageCount`、`toggleTheme`；`EditorHandle` 新增 `addImage` / `commentCount` / `imageCount`。
+
+### 24.3 开发中修复的问题
+
+- **Blob 类型**：`Blob([bytes])` 的 `Uint8Array<ArrayBufferLike>` 不被 TS 接受；改为复制成独立 `ArrayBuffer` 再构造 Blob。
+- **深色顶栏仍是白色**：替换 CSS 时误删 `.topbar`，且实际类名是 `.fmt-toolbar`；补回 `.topbar` 并覆盖 `.sheet-host / .sheet-grid / .fmt-toolbar / .data-toolbar / .formula-bar / .sheet-tabs`。
+- **深色弱文字对比不足**：补 `.tb-name`、`.tb-dirty`、`.tb-sheets`、`.tb-status` 的深色颜色，文档名与“未保存”不再发灰。
+- **重开后停在欢迎页**：`e2e-1.0.mjs` 在 reload 后立刻打开文件，会被 App 启动的 620ms splash 定时器打回欢迎页；改为等 `screen === "welcome"` 再 `openPath`。
+- **图表回归断言过期**：M2 旧测试按 4 种图表写死类型数、插入数、关闭后剩余数；1.0 扩到 6 种后同步改为 6，并按实际 DOM 顺序校正类型标题数组。
+- **M10 验证输入追加**：`barSet` 点击公式栏后直接输入，会把新值接在旧值后面，导致“高 → 超高 → 高”一直非法；改为先 `Ctrl+A` 全选再输入。
+- **浮动图片默认落点**：按 `gridRef.clientHeight - 220` 计算，测试环境可能拿到 0；正常窗口落在下方空白区，不再压住标题。仍可手动拖动。
+
+### 24.4 验收结果
+
+- **1.0 功能 E2E**：打开 `M15-1.0-working.xlsx` 副本，B3 加批注“10 月续约金额要再和合同核对一次”；插入 SVG 浮动图；切深色、浅色各截一张；保存 `M15-1.0.xlsx`；读 `docProps/custom.xml` 解 base64 JSON，断言 `comments.length=1`、`images.length=1`；清空全部 `soroban:*` 后 reload 重开，`.comment-mark` 与 `.sheet-image-card` 恢复，控制台 0 错误。
+- **图表 / 导入 E2E**：`M0-样本.xlsx` 副本插入条形图（`A2:B5`）与组合图（`A2:C5`），图表卡各 1 张、图例为“销售额 / 成本”；`M17-导入.tsv` 导入后 1 表 3 列 4 行，toast 显示 UTF-8。
+- **发布回归**：M0、M2、M3、M4、M8、M9、M10、multi、pivot、cf、metadata 全过；MCP 4 工具通过；`cargo test --release` 7 passed。
+- **安装版复验**：NSIS 1.0 静默安装后，安装版 1.0 功能 E2E 与图表 / TSV E2E 均通过；卸载退出码 0，安装目录删除，HKCU 无残留。安装中途本机断电，重启后核对注册表版本 `1.0.0`、安装目录与 exe 版本后再继续，未重放安装。
+- **构建**：Vite 构建 43.84s，主 JS 10,287.47 kB；release profile 2m 15s；NSIS 4.20 MiB（4,399,531 B）。
+- **截图 / 日志**：`review-1.0/001-1.0-dark.png`、`002-1.0-light.png`、`003-1.0-reopen.png`、`004-1.0-charts.png`、`005-1.0-tsv.png`；日志 `e2e-1.0-run.txt`、`e2e-1.0-charts-run.txt`、`release-e2e-1.0.txt`、`release-e2e-1.0-charts.txt`、`installed-1.0.txt`、`installed-1.0-charts.txt`、`m0-release.txt` 至 `m10-release.txt`、`multi-release.txt`、`pivot-release.txt`、`cf-release.txt`、`metadata-release.txt`、`mcp-test-release.txt`、`rust-test-release.txt`、`build-release.log`。
+
+### 24.5 已知边界
+
+- 批注与浮动图片是 Soroban 自有对象，真实 Excel 打开 xlsx 不会显示；图表卡同样不显示。单元格数据、公式、已应用的条件格式样式仍按标准 xlsx 呈现。
+- 第三方工具重写 xlsx 并删除 `docProps/custom.xml` 时，图表、批注、图片、打印设置会一起丢失。
+- 图片以 data URL 存进自定义属性，大图会显著增加 xlsx 体积；未做压缩，也未写入 `xl/media`。
+- 批注作者固定为“本机用户”，没有账户体系；批注时间取本机当前时间。
+- 浮动图片支持拖动与等比缩放，但没有旋转、裁剪、锁定、层级排序。
+- TSV / TXT 导入按文本表格处理，不识别 Excel 多工作表；导入即新建文档。
+
+### 24.6 产物（v1.0.0）
+
+| 文件 | 大小 | SHA-256 |
+|---|---:|---|
+| `Soroban.exe` | 7,017,984 B（6.69 MB） | `C6977F023C62EEB8F741A6B2470C7269C59C71D1BC6EFFCFB16DADA62EC84B83` |
+| `Soroban_1.0.0_x64-setup.exe` | 4,399,531 B（4.20 MB） | `6C584BCAE875BDE6CBDE4B544D4286F0A877F2362BA6A744DBD70AB888FC2A50` |
+| `Soroban-1.0.0-portable-win64.zip` | 4,688,490 B（4.47 MB） | `66BB5DA7A92B12F00CB046E91D1DD4AA9DD82C0FD3CDB0103DAE26E598AE3187` |
+
+产物已复制到 `Soroban/` 与套件根目录，`release-1.0.0.sha256` / `release-soroban-1.0.0.sha256` 已写入；0.11.0 安装包保留作历史。安装版 `soroban.exe` 7,017,984 B，SHA-256 `F6045D9381D436412151FE8668DEE6C92D9F89FF0F5B777CFDFA7D559F1CEB30`，`uninstall.exe` 79,425 B。便携版含 `Soroban.exe`、`LICENSE` 1,072 B、`release-1.0.0.sha256` 172 B、`release-notes-1.0.0.md` 2,967 B；解压后 exe 哈希与发布件一致。均未签名。
+
+*小方工作室 · Soroban · 1.0.0 协作痕迹与视觉表达 ｜ Papyra 办公套件 ｜ 2026-11-28*
 
 

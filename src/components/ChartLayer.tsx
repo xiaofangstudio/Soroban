@@ -19,8 +19,10 @@ type StudioProps = {
 
 const TYPES: { type: ChartType; hint: string }[] = [
   { type: "column", hint: "比较大小" },
+  { type: "bar", hint: "横向排名" },
   { type: "line", hint: "看趋势" },
   { type: "area", hint: "看累积" },
+  { type: "combo", hint: "柱线同图" },
   { type: "pie", hint: "看占比" },
 ];
 
@@ -45,6 +47,25 @@ function TypeGlyph({ type }: { type: ChartType }) {
       <svg viewBox="0 0 24 20" aria-hidden>
         <path d="M2 16L7 9L12 12L17 4L22 7V18H2Z" fill="currentColor" opacity=".3" />
         <path d="M2 16L7 9L12 12L17 4L22 7" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      </svg>
+    );
+  }
+  if (type === "bar") {
+    return (
+      <svg viewBox="0 0 24 20" aria-hidden>
+        <rect x="3" y="3" width="15" height="3" rx="1.2" fill="currentColor" opacity=".62" />
+        <rect x="3" y="8.5" width="11" height="3" rx="1.2" fill="currentColor" />
+        <rect x="3" y="14" width="18" height="3" rx="1.2" fill="currentColor" opacity=".78" />
+      </svg>
+    );
+  }
+  if (type === "combo") {
+    return (
+      <svg viewBox="0 0 24 20" aria-hidden>
+        <rect x="3" y="9" width="4" height="8" rx="1" fill="currentColor" opacity=".55" />
+        <rect x="10" y="5" width="4" height="12" rx="1" fill="currentColor" opacity=".75" />
+        <rect x="17" y="8" width="4" height="9" rx="1" fill="currentColor" opacity=".55" />
+        <path d="M3 8L9 4L15 9L21 3" fill="none" stroke="currentColor" strokeWidth="1.8" />
       </svg>
     );
   }

@@ -1,0 +1,5 @@
+APPLIED {"count":2,"a1":"E2:E13"}
+REOPEN {"count":2,"dirty":false,"active":"明细"}
+MENU900 {"x":589,"y":80,"w":236,"h":289,"scroll":288,"client":288}
+ERRORS []
+M12 CF E2E OK
