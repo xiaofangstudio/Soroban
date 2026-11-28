@@ -257,6 +257,7 @@
   box-shadow: var(--shadow-md);
   overflow: hidden;
 }
+.sheet-image-card.locked { border-style: dashed; }
 .sheet-image-head {
   height: 24px;
   display: flex;
@@ -270,12 +271,24 @@
   cursor: move;
   user-select: none;
 }
-.sheet-image-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sheet-image-card.locked .sheet-image-head { cursor: default; }
+.sheet-image-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.sheet-image-tools { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.sheet-image-tool {
+  min-width: 18px; height: 18px; padding: 0 3px; border: 0; border-radius: 4px;
+  background: transparent; color: var(--text-2); font-size: 10px; line-height: 1;
+}
+.sheet-image-tool:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.sheet-image-tool.on { color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
 .sheet-image-close {
   width: 18px; height: 18px; border: 0; border-radius: 4px; background: transparent; color: var(--text-2); line-height: 1;
 }
 .sheet-image-close:hover { color: #e15b5b; }
-.sheet-image-card img { width: 100%; height: calc(100% - 24px); object-fit: contain; background: #fff; pointer-events: none; }
+.sheet-image-body { position: relative; flex: 1; overflow: hidden; }
+.sheet-image-frame { position: absolute; transform-origin: center center; }
+.sheet-image-frame img {
+  width: 100%; height: 100%; object-fit: contain; background: #fff; pointer-events: none;
+}
 .sheet-image-resize {
   position: absolute; right: 2px; bottom: 2px; width: 13px; height: 13px;
   border-right: 2px solid var(--accent); border-bottom: 2px solid var(--accent);

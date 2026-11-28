@@ -172,11 +172,14 @@ type CardProps = {
   image: SheetImage;
   onMove: (id: string, x: number, y: number) => void;
   onResize: (id: string, width: number, height: number) => void;
+  onPatch: (id: string, patch: Partial<SheetImage>) => void;
+  onRaise: (id: string) => void;
   onDelete: (id: string) => void;
 };
 
-export function ImageCard({ image, onMove, onResize, onDelete }: CardProps) {
+export function ImageCard({ image, onMove, onResize, onPatch, onRaise, onDelete }: CardProps) {
   const startDrag = (event: ReactPointerEvent, mode: "move" | "resize") => {
+    if (image.locked) return;
     event.stopPropagation();
     event.preventDefault();
     const target = event.currentTarget as HTMLElement;
@@ -205,26 +208,90 @@ export function ImageCard({ image, onMove, onResize, onDelete }: CardProps) {
     window.addEventListener("pointercancel", stop);
   };
 
+  const rotation = image.rotation ?? 0;
+  const quarter = rotation % 180 !== 0;
+  const bodyW = image.width;
+  const bodyH = Math.max(24, image.height - 24);
+  const frameW = quarter ? bodyH : bodyW;
+  const frameH = quarter ? bodyW : bodyH;
+
   return (
     <div
-      className="sheet-image-card"
-      style={{ left: image.x, top: image.y, width: image.width, height: image.height }}
+      className={`sheet-image-card${image.locked ? " locked" : ""}`}
+      style={{
+        left: image.x,
+        top: image.y,
+        width: image.width,
+        height: image.height,
+        zIndex: 18 + (image.z ?? 0),
+      }}
       onPointerDown={(event) => event.stopPropagation()}
       onWheel={(event) => event.stopPropagation()}
     >
-      <div className="sheet-image-head" onPointerDown={(event) => startDrag(event, "move")} title="拖动图片">
+      <div
+        className="sheet-image-head"
+        onPointerDown={(event) => startDrag(event, "move")}
+        title={image.locked ? "图片已锁定" : "拖动图片"}
+      >
         <span>{image.name}</span>
-        <button
-          className="sheet-image-close"
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={() => onDelete(image.id)}
-          title="删除图片"
-        >
-          ×
-        </button>
+        <div className="sheet-image-tools">
+          <button
+            className="sheet-image-tool"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => {
+              onPatch(image.id, {
+                rotation: (rotation + 90) % 360,
+                width: image.height,
+                height: image.width,
+              });
+            }}
+            title="顺时针旋转 90°"
+          >
+            ↻
+          </button>
+          <button
+            className={`sheet-image-tool${image.locked ? " on" : ""}`}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => onPatch(image.id, { locked: !image.locked })}
+            title={image.locked ? "解锁图片" : "锁定图片（禁止拖动和缩放）"}
+          >
+            锁
+          </button>
+          <button
+            className="sheet-image-tool"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => onRaise(image.id)}
+            title="置顶图片"
+          >
+            顶
+          </button>
+          <button
+            className="sheet-image-close"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => onDelete(image.id)}
+            title="删除图片"
+          >
+            ×
+          </button>
+        </div>
       </div>
-      <img src={image.dataUrl} alt={image.name} draggable={false} />
-      <span className="sheet-image-resize" onPointerDown={(event) => startDrag(event, "resize")} title="调整大小" />
+      <div className="sheet-image-body">
+        <div
+          className="sheet-image-frame"
+          style={{
+            width: frameW,
+            height: frameH,
+            left: (bodyW - frameW) / 2,
+            top: (bodyH - frameH) / 2,
+            transform: `rotate(${rotation}deg)`,
+          }}
+        >
+          <img src={image.dataUrl} alt={image.name} draggable={false} />
+        </div>
+      </div>
+      {!image.locked && (
+        <span className="sheet-image-resize" onPointerDown={(event) => startDrag(event, "resize")} title="调整大小" />
+      )}
     </div>
   );
 }

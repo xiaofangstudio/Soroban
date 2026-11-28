@@ -1,0 +1,12 @@
+Soroban 图片控制烟测
+PASS 样本工作簿没有旧图片
+PASS 插入第一张图片
+PASS 旋转按钮存在
+PASS 旋转后占位宽高互换 — {"width":"180px","height":"280px","transform":"rotate(90deg)","frameW":"256px","frameH":"180px"}
+PASS 图片帧旋转 90°
+PASS 锁定后无缩放手柄 — {"locked":true,"handle":false}
+PASS 图片数量为 2
+PASS 置顶后压过第二张 — [{"name":"封面图.png","z":"21"},{"name":"第二张.png","z":"20"}]
+PASS Ctrl+V 剪贴板图片进入表格 — 2 → 3
+PASS xlsx 保存旋转/锁定/层级 — {"rotation":90,"locked":true,"z":3}
+PASS 控制台无错误

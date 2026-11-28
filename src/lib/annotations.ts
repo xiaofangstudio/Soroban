@@ -18,6 +18,12 @@ export type SheetImage = {
   y: number;
   width: number;
   height: number;
+  /** 顺时针旋转角度，只存 0/90/180/270。 */
+  rotation?: number;
+  /** 锁定后不能拖动和缩放，但可以旋转、置顶、解锁、删除。 */
+  locked?: boolean;
+  /** 层叠顺序，越大越靠前。 */
+  z?: number;
 };
 
 function keyOf(kind: "comments" | "images", docPath: string | null, docName: string): string {
@@ -68,6 +74,9 @@ export function normalizeImages(value: unknown): SheetImage[] {
     y: Number.isFinite(item.y) ? item.y : 24,
     width: Math.max(40, Number.isFinite(item.width) ? item.width : 220),
     height: Math.max(40, Number.isFinite(item.height) ? item.height : 140),
+    rotation: typeof item.rotation === "number" && Number.isFinite(item.rotation) ? ((Math.round(item.rotation / 90) * 90) % 360 + 360) % 360 : 0,
+    locked: !!item.locked,
+    z: typeof item.z === "number" && Number.isFinite(item.z) ? item.z : 0,
   }));
 }
 

@@ -769,25 +769,59 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
     const book = apiRef.current?.getActiveWorkbook();
     const sheetName = book?.getActiveSheet()?.getSheetName();
     if (!book || !sheetName) return false;
-    const offset = images.filter((item) => item.sheetName === sheetName).length * 18;
+    const sheetCount = images.filter((item) => item.sheetName === sheetName).length;
     const grid = gridRef.current;
+    const stepX = 300;
+    const stepY = 200;
+    const columns = Math.max(1, Math.floor(((grid?.clientWidth ?? 900) - 48) / stepX));
+    const slotX = (sheetCount % columns) * stepX;
+    const slotY = Math.floor(sheetCount / columns) * stepY;
     const image: SheetImage = {
       id: makeImageId(),
       sheetName,
       name: fileName || "图片",
       dataUrl,
-      x: 36 + offset,
-      y: Math.max(120, (grid?.clientHeight ?? 620) - 220 + offset),
+      x: 24 + slotX,
+      y: 24 + slotY,
       width: 280,
       height: 180,
+      rotation: 0,
+      locked: false,
+      z: Math.max(0, ...images.map((item) => item.z ?? 0)) + 1,
     };
     updateImages([...images, image]);
     callbacksRef.current.onInfo(`已插入 ${image.name}`);
     return true;
   }, [images, updateImages]);
 
-  const insertImage = useCallback(async () => {
-    try {
+  /** 截图或复制的图片可以直接 Ctrl+V 放进当前工作表。 */
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      const clipboard = event.clipboardData;
+      if (!clipboard?.items) return;
+      const item = Array.from(clipboard.items).find((entry) => entry.type.startsWith("image/"));
+      const file = item?.getAsFile();
+      if (!file) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (file.size > 8 * 1024 * 1024) {
+        callbacksRef.current.onError("剪贴板图片超过 8MB，暂不插入");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result !== "string") return;
+        const stamp = new Date().toISOString().slice(11, 19).replace(/:/g, "");
+        placeImage(reader.result, file.name || `剪贴板图片-${stamp}.png`);
+      };
+      reader.onerror = () => callbacksRef.current.onError("读取剪贴板图片失败");
+      reader.readAsDataURL(file);
+    };
+    window.addEventListener("paste", onPaste, true);
+    return () => window.removeEventListener("paste", onPaste, true);
+  }, [placeImage]);
+
+  const insertImage = useCallback(async () => {    try {
       const path = await openDialog({
         multiple: false,
         filters: [{ name: "图片", extensions: ["png", "jpg", "jpeg", "webp", "gif"] }],
@@ -820,6 +854,15 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
 
   const resizeImage = useCallback((id: string, width: number, height: number) => {
     updateImages(images.map((item) => (item.id === id ? { ...item, width, height } : item)));
+  }, [images, updateImages]);
+
+  const patchImage = useCallback((id: string, patch: Partial<SheetImage>) => {
+    updateImages(images.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  }, [images, updateImages]);
+
+  const raiseImage = useCallback((id: string) => {
+    const top = Math.max(0, ...images.map((item) => item.z ?? 0));
+    updateImages(images.map((item) => (item.id === id ? { ...item, z: top + 1 } : item)));
   }, [images, updateImages]);
 
   const deleteImage = useCallback((id: string) => {
@@ -3015,6 +3058,8 @@ export const SheetEditor = forwardRef<EditorHandle, Props>(function SheetEditor(
               image={image}
               onMove={moveImage}
               onResize={resizeImage}
+              onPatch={patchImage}
+              onRaise={raiseImage}
               onDelete={deleteImage}
             />
           ))}
